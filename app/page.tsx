@@ -10,10 +10,13 @@ import GlobeOctogram from "@/components/GlobeOctogram";
 import RequestAccess from "@/components/RequestAccess";
 import Statusbar from "@/components/Statusbar";
 import Topbar from "@/components/Topbar";
+import ViewportRedirect from "@/components/ViewportRedirect";
 
 export default function Home() {
   return (
     <div className="la-frame varB">
+      {/* Hand narrow viewports to the mobile page even when the UA lies. */}
+      <ViewportRedirect to="/mobile" query="(max-width: 1024px)" />
       <Background />
       <Topbar />
 
