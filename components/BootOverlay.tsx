@@ -23,7 +23,7 @@ const BOOT_LINES = [
   "» locking on SINUS MEDII 0°00′N 0°00′E ... OK",
   "» opening berth manifest · 09 nodes ...... OK",
   "» credentials received · queued for review.",
-  "» clearance status .................. PENDING",
+  "» clearance status ......... NOT AVAILABLE",
 ];
 
 export default function BootOverlay({
@@ -93,10 +93,10 @@ export default function BootOverlay({
                   <b>{l.replace(/ ?OK$/, "")}</b>
                   <span style={{ color: "#6ad8a8" }}> OK</span>
                 </>
-              ) : l.endsWith("PENDING") ? (
+              ) : l.endsWith("NOT AVAILABLE") ? (
                 <>
-                  <b>{l.replace(/ ?PENDING$/, "")}</b>
-                  <span style={{ color: "var(--ember)" }}> PENDING</span>
+                  <b>{l.replace(/ ?NOT AVAILABLE$/, "")}</b>
+                  <span style={{ color: "var(--ember)" }}> NOT AVAILABLE</span>
                 </>
               ) : (
                 l
@@ -114,7 +114,7 @@ export default function BootOverlay({
         {progress === 100 && (
           <div className="pending">
             <span className="pip" />
-            CLEARANCE PENDING · YOUR REQUEST IS QUEUED FOR REVIEW
+            CLEARANCE NOT AVAILABLE · STATION IN LOCK DOWN
           </div>
         )}
         {progress === 100 && (
