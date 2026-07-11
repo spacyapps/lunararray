@@ -150,6 +150,43 @@ export function Teardrop({
   );
 }
 
+// Subtle structural-rib relief for glass domes — bump only, no color map,
+// so it doesn't fight the transparency or tint. Same center-to-rim polar
+// UV as Dish below (thetaStart=0 cap), so concentric rings read as the
+// support frame you'd see embedded in real curved glass.
+function buildDomeBump(): HTMLCanvasElement {
+  const w = 512;
+  const h = 512;
+  const cv = document.createElement("canvas");
+  cv.width = w;
+  cv.height = h;
+  const ctx = cv.getContext("2d")!;
+  ctx.fillStyle = "#808080";
+  ctx.fillRect(0, 0, w, h);
+
+  const cx = w / 2;
+  const cy = h / 2;
+  const nRings = 5;
+  for (let i = 1; i <= nRings; i++) {
+    ctx.strokeStyle = "rgba(255,255,255,0.1)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(cx, cy, (i / nRings) * w * 0.5, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  const nSpokes = 10;
+  for (let i = 0; i < nSpokes; i++) {
+    const a = (i / nSpokes) * Math.PI * 2;
+    ctx.strokeStyle = "rgba(255,255,255,0.08)";
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + Math.cos(a) * w * 0.5, cy + Math.sin(a) * h * 0.5);
+    ctx.stroke();
+  }
+  return cv;
+}
+
 /** Flattened glass-like lens dome sitting on the ground. */
 export function LensDome({
   r = 5,
@@ -165,6 +202,11 @@ export function LensDome({
   opacity?: number;
   emissive?: string;
 } & ThreeElements["group"]) {
+  const bump = useMemo(() => {
+    const tex = new THREE.CanvasTexture(buildDomeBump());
+    tex.anisotropy = 4;
+    return tex;
+  }, []);
   return (
     <group {...props}>
       <mesh scale={[1, squash, 1]}>
@@ -175,6 +217,8 @@ export function LensDome({
           opacity={opacity}
           roughness={0.15}
           metalness={0.1}
+          bumpMap={bump}
+          bumpScale={0.025}
           emissive={emissive ?? "#000000"}
           emissiveIntensity={emissive ? 0.5 : 0}
           side={THREE.DoubleSide}
@@ -182,6 +226,49 @@ export function LensDome({
       </mesh>
     </group>
   );
+}
+
+// One repeat-tile of pipe detail — a couple of longitudinal seams (baked
+// directly, since TubeGeometry's UV.u already wraps 0-1 around the
+// circumference with no repeat needed) plus a single ring seam positioned
+// to tile seamlessly along v. The component sets texture.repeat.y from the
+// curve's real arc length, so a short connector and a rail spanning the
+// whole map both read as built from similarly-spaced pipe segments.
+function buildTubeTexture(): HTMLCanvasElement {
+  const w = 256;
+  const h = 256;
+  const cv = document.createElement("canvas");
+  cv.width = w;
+  cv.height = h;
+  const ctx = cv.getContext("2d")!;
+  ctx.fillStyle = "#9a9a9a";
+  ctx.fillRect(0, 0, w, h);
+
+  const nSeamsU = 4;
+  for (let i = 0; i < nSeamsU; i++) {
+    const x = (i / nSeamsU) * w;
+    ctx.strokeStyle = "rgba(0,0,0,0.14)";
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, h);
+    ctx.stroke();
+  }
+
+  ctx.strokeStyle = "rgba(0,0,0,0.22)";
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(0, 4);
+  ctx.lineTo(w, 4);
+  ctx.stroke();
+  ctx.strokeStyle = "rgba(255,255,255,0.08)";
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.moveTo(0, 9);
+  ctx.lineTo(w, 9);
+  ctx.stroke();
+
+  return cv;
 }
 
 /** Swept connector tube through world-space points (CatmullRom). */
@@ -199,24 +286,39 @@ export function SweepTube({
   emissive?: string;
   toon?: boolean;
 } & ThreeElements["group"]) {
-  const geometry = useMemo(() => {
-    const curve = new THREE.CatmullRomCurve3(
-      pts.map((p) => new THREE.Vector3(...p)),
-    );
-    return new THREE.TubeGeometry(curve, 48, r, 12, false);
-  }, [pts, r]);
+  const curve = useMemo(
+    () => new THREE.CatmullRomCurve3(pts.map((p) => new THREE.Vector3(...p))),
+    [pts],
+  );
+  const geometry = useMemo(() => new THREE.TubeGeometry(curve, 48, r, 12, false), [curve, r]);
+  const texture = useMemo(() => {
+    const tex = new THREE.CanvasTexture(buildTubeTexture());
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    const ringSpacing = 3; // world units per ring seam
+    tex.repeat.set(1, Math.max(1, Math.round(curve.getLength() / ringSpacing)));
+    tex.anisotropy = 4;
+    return tex;
+  }, [curve]);
   return (
     <group {...props}>
       <mesh geometry={geometry}>
         {toon ? (
           <meshToonMaterial
             color={color}
+            map={texture}
+            bumpMap={texture}
+            bumpScale={0.02}
             emissive={emissive ?? "#000000"}
             emissiveIntensity={emissive ? 0.8 : 0}
           />
         ) : (
           <meshStandardMaterial
             color={color}
+            map={texture}
+            bumpMap={texture}
+            bumpScale={0.02}
             emissive={emissive ?? "#000000"}
             emissiveIntensity={emissive ? 0.8 : 0}
             roughness={0.6}
@@ -227,22 +329,86 @@ export function SweepTube({
   );
 }
 
+// Top-down plate marking for the pad's deck cap — CylinderGeometry's cap UV
+// is an orthographic (x,z) -> (u,v) projection, same technique as the Moon
+// photo, so a canvas drawn "as seen from above" maps directly onto it.
+// Radial plate seams + rivets + a soft center wear scuff; the bright accent
+// rings stay separate glowing geometry, this just adds the deck's own detail.
+function buildPadTexture(seed: number): HTMLCanvasElement {
+  const w = 512;
+  const h = 512;
+  const cv = document.createElement("canvas");
+  cv.width = w;
+  cv.height = h;
+  const ctx = cv.getContext("2d")!;
+  const cx = w / 2;
+  const cy = h / 2;
+
+  ctx.fillStyle = "#9a9a9a";
+  ctx.fillRect(0, 0, w, h);
+
+  const nSlices = 10 + Math.floor(seedRand(seed * 3 + 2) * 4);
+  ctx.strokeStyle = "rgba(0,0,0,0.16)";
+  ctx.lineWidth = 2;
+  for (let i = 0; i < nSlices; i++) {
+    const a = (i / nSlices) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + Math.cos(a) * w * 0.55, cy + Math.sin(a) * h * 0.55);
+    ctx.stroke();
+  }
+
+  ctx.strokeStyle = "rgba(0,0,0,0.12)";
+  ctx.lineWidth = 1.6;
+  for (const f of [0.35, 0.62, 0.85]) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, f * w * 0.5, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  ctx.fillStyle = "rgba(0,0,0,0.2)";
+  const nRiv = 28;
+  for (let i = 0; i < nRiv; i++) {
+    const a = (i / nRiv) * Math.PI * 2;
+    const rr = w * 0.42;
+    ctx.beginPath();
+    ctx.arc(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr, 2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  const wear = ctx.createRadialGradient(cx, cy, 0, cx, cy, w * 0.28);
+  wear.addColorStop(0, "rgba(0,0,0,0.22)");
+  wear.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = wear;
+  ctx.fillRect(0, 0, w, h);
+
+  return cv;
+}
+
 /** Landing pad: low cylinder, glowing edge ring, inner marking. */
 export function Pad({
   r = 4,
   accent = "#5cd6ff",
   deck = "#3a3e4a",
+  seed = 0,
   ...props
 }: {
   r?: number;
   accent?: string;
   deck?: string;
+  seed?: number;
 } & ThreeElements["group"]) {
+  const texture = useMemo(() => {
+    const tex = new THREE.CanvasTexture(buildPadTexture(seed));
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 4;
+    return tex;
+  }, [seed]);
   return (
     <group {...props}>
       <mesh position={[0, 0.15, 0]}>
         <cylinderGeometry args={[r, r * 1.08, 0.3, 48]} />
-        <meshStandardMaterial color={deck} roughness={0.9} />
+        <meshStandardMaterial color={deck} map={texture} bumpMap={texture} bumpScale={0.03} roughness={0.9} />
       </mesh>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.32, 0]}>
         <ringGeometry args={[r * 0.9, r * 0.97, 48]} />
@@ -254,6 +420,54 @@ export function Pad({
       </mesh>
     </group>
   );
+}
+
+// Dish-surface detail: concentric mesh rings (v = center-to-rim, matching
+// the sphere cap's polar UV) + radial support spokes (u = azimuth, wraps
+// naturally) + sparse perforation dots for a wire-mesh-antenna feel.
+function buildDishTexture(): HTMLCanvasElement {
+  const w = 512;
+  const h = 512;
+  const cv = document.createElement("canvas");
+  cv.width = w;
+  cv.height = h;
+  const ctx = cv.getContext("2d")!;
+  ctx.fillStyle = "#9c9c9c";
+  ctx.fillRect(0, 0, w, h);
+
+  const nRings = 10;
+  for (let i = 1; i < nRings; i++) {
+    const y = (i / nRings) * h;
+    ctx.strokeStyle = "rgba(0,0,0,0.14)";
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(w, y);
+    ctx.stroke();
+  }
+
+  const nSpokes = 16;
+  for (let i = 0; i < nSpokes; i++) {
+    const x = (i / nSpokes) * w;
+    ctx.strokeStyle = "rgba(0,0,0,0.18)";
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, h);
+    ctx.stroke();
+  }
+
+  ctx.fillStyle = "rgba(0,0,0,0.1)";
+  for (let ry = 0; ry < 20; ry++) {
+    for (let rx = 0; rx < 40; rx++) {
+      if (seedRand(ry * 40 + rx) > 0.4) continue;
+      ctx.beginPath();
+      ctx.arc((rx / 40) * w, (ry / 20) * h, 1.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  return cv;
 }
 
 /** Parabolic comms dish on a mast, aimed up and out. */
@@ -271,6 +485,12 @@ export function Dish({
   accent?: string;
   mast?: number;
 } & ThreeElements["group"]) {
+  const texture = useMemo(() => {
+    const tex = new THREE.CanvasTexture(buildDishTexture());
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 4;
+    return tex;
+  }, []);
   return (
     <group {...props}>
       <mesh position={[0, mast / 2, 0]}>
@@ -280,7 +500,7 @@ export function Dish({
       <group position={[0, mast, 0]} rotation={[tilt, 0, 0]}>
         <mesh>
           <sphereGeometry args={[r, 40, 16, 0, Math.PI * 2, 0, Math.PI * 0.28]} />
-          <meshToonMaterial color={color} side={THREE.DoubleSide} />
+          <meshToonMaterial color={color} map={texture} bumpMap={texture} bumpScale={0.035} side={THREE.DoubleSide} />
         </mesh>
         <mesh position={[0, r * 0.55, 0]}>
           <cylinderGeometry args={[0.03, 0.03, r * 1.1, 6]} />
