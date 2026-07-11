@@ -72,7 +72,7 @@ export default function LA08() {
           position={[t.x, 0, t.z]}
           rotation={[0, 0, (seedRand(i * 13 + 3) - 0.5) * 0.06]}
         >
-          <Teardrop height={t.h} radius={t.r} color={HULL} />
+          <Teardrop height={t.h} radius={t.r} color={HULL} variant="residential" />
           {[0.22, 0.4, 0.58].map((f, j) => (
             <WindowBand
               key={j}

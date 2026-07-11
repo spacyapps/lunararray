@@ -95,6 +95,119 @@ function buildHullTexture(height: number, seed: number): HTMLCanvasElement {
   return cv;
 }
 
+interface ResidentialWindow {
+  x: number;
+  yTop: number;
+  w: number;
+  h: number;
+  lit: boolean;
+  cool: boolean;
+}
+
+// Residential tower dressing: rows of windows (some lit warm, some cool blue,
+// some dark — a lived-in mix, not a uniform grid), roofline eave clusters
+// (a few close parallel lines per floor instead of one seam, nodding at
+// stacked tile eaves rather than sci-fi panel plating — a wink at Tsukibase's
+// Japanese theming), and periodic patio/balcony bands with a railing tick
+// pattern. Returns a diffuse map (facade + unlit window silhouettes + eaves
+// + patios) and a matching emissiveMap (black except lit windows, so they
+// actually glow at night rather than just reading as a tinted patch) built
+// from the same window layout so the two stay pixel-aligned.
+function buildResidentialTextures(
+  height: number,
+  seed: number,
+): { map: HTMLCanvasElement; emissive: HTMLCanvasElement } {
+  const w = 512;
+  const h = 1024;
+  const floorSpacing = 1.05; // world units per floor — denser than hull panels
+  const nFloors = Math.max(4, Math.round(height / floorSpacing));
+
+  const windows: ResidentialWindow[] = [];
+  for (let f = 0; f < nFloors; f++) {
+    const yBot = h - (f / nFloors) * h;
+    const yTop = h - ((f + 1) / nFloors) * h;
+    const floorH = yBot - yTop;
+    const nWin = 14 + Math.floor(seedRand(seed * 5 + f * 3) * 6);
+    const winH = floorH * 0.42;
+    const winY = yTop + floorH * 0.3;
+    for (let i = 0; i < nWin; i++) {
+      const roll = seedRand(seed * 7 + f * 11 + i * 3);
+      if (roll < 0.28) continue; // gap — bare facade between windows
+      const winW = (w / nWin) * 0.6;
+      const x = (i / nWin) * w + (w / nWin) * 0.2;
+      windows.push({ x, yTop: winY, w: winW, h: winH, lit: roll > 0.45, cool: roll > 0.72 });
+    }
+  }
+
+  const map = document.createElement("canvas");
+  map.width = w;
+  map.height = h;
+  const mctx = map.getContext("2d")!;
+  mctx.fillStyle = "#c8c6d6";
+  mctx.fillRect(0, 0, w, h);
+
+  for (let f = 0; f < nFloors; f++) {
+    const yBot = h - (f / nFloors) * h;
+    const yTop = h - ((f + 1) / nFloors) * h;
+    const floorH = yBot - yTop;
+
+    // roofline eave cluster — a few close lines rather than one seam
+    if (f < nFloors - 1) {
+      for (let k = 0; k < 3; k++) {
+        mctx.strokeStyle = `rgba(0,0,0,${(0.15 - k * 0.035).toFixed(3)})`;
+        mctx.lineWidth = 1.3;
+        mctx.beginPath();
+        mctx.moveTo(0, yTop + k * 2.2);
+        mctx.lineTo(w, yTop + k * 2.2);
+        mctx.stroke();
+      }
+    }
+
+    // periodic patio/balcony band with a railing tick pattern
+    if (f > 0 && f % 3 === 0) {
+      const py = yBot - floorH * 0.14;
+      const ph = floorH * 0.1;
+      mctx.fillStyle = "rgba(0,0,0,0.12)";
+      mctx.fillRect(0, py, w, ph);
+      const nTicks = 40;
+      mctx.strokeStyle = "rgba(0,0,0,0.18)";
+      mctx.lineWidth = 1;
+      for (let t = 0; t < nTicks; t++) {
+        const x = (t / nTicks) * w;
+        mctx.beginPath();
+        mctx.moveTo(x, py);
+        mctx.lineTo(x, py + ph);
+        mctx.stroke();
+      }
+    }
+  }
+
+  for (const win of windows) {
+    mctx.fillStyle = win.lit ? "rgba(0,0,0,0.05)" : "rgba(0,0,0,0.28)";
+    mctx.fillRect(win.x, win.yTop, win.w, win.h);
+  }
+
+  const grad = mctx.createLinearGradient(0, h, 0, h * 0.85);
+  grad.addColorStop(0, "rgba(0,0,0,0.3)");
+  grad.addColorStop(1, "rgba(0,0,0,0)");
+  mctx.fillStyle = grad;
+  mctx.fillRect(0, 0, w, h);
+
+  const emissive = document.createElement("canvas");
+  emissive.width = w;
+  emissive.height = h;
+  const ectx = emissive.getContext("2d")!;
+  ectx.fillStyle = "#000000";
+  ectx.fillRect(0, 0, w, h);
+  for (const win of windows) {
+    if (!win.lit) continue;
+    ectx.fillStyle = win.cool ? "#a8d8ff" : "#ffd9a0";
+    ectx.fillRect(win.x, win.yTop, win.w, win.h);
+  }
+
+  return { map, emissive };
+}
+
 /** Teardrop hull of `height` along +Y: round belly, tapering to a point. */
 export function Teardrop({
   height = 8,
@@ -104,6 +217,7 @@ export function Teardrop({
   emissiveIntensity = 0.35,
   seed,
   imageMap,
+  variant = "hull",
   ...props
 }: {
   height?: number;
@@ -116,6 +230,10 @@ export function Teardrop({
    *  under public/textures/, wired in per AGENTS.md's named-exception policy.
    *  Falls back to the procedural texture while it loads or if absent. */
   imageMap?: string;
+  /** "residential" swaps the procedural texture for rows of windows (some
+   *  lit warm, some cool, some dark) with real emissive glow, roofline eave
+   *  clusters, and periodic patio bands — for city/residential towers. */
+  variant?: "hull" | "residential";
 } & ThreeElements["group"]) {
   const geometry = useMemo(() => {
     const pts: THREE.Vector2[] = [];
@@ -131,13 +249,23 @@ export function Teardrop({
   }, [height, radius]);
 
   const hullSeed = seed ?? Math.round(height * 37 + radius * 131);
-  const proceduralTexture = useMemo(() => {
-    const canvas = buildHullTexture(height, hullSeed);
+  const isResidential = variant === "residential";
+  const proceduralMap = useMemo(() => {
+    const canvas = isResidential
+      ? buildResidentialTextures(height, hullSeed).map
+      : buildHullTexture(height, hullSeed);
     const tex = new THREE.CanvasTexture(canvas);
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.anisotropy = 4;
     return tex;
-  }, [height, hullSeed]);
+  }, [height, hullSeed, isResidential]);
+  const proceduralEmissiveMap = useMemo(() => {
+    if (!isResidential) return null;
+    const tex = new THREE.CanvasTexture(buildResidentialTextures(height, hullSeed).emissive);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 4;
+    return tex;
+  }, [height, hullSeed, isResidential]);
 
   // imageMap is a fixed per-instance override (set once at the call site,
   // never toggled at runtime), so there's no "revert to procedural" case to
@@ -157,7 +285,8 @@ export function Teardrop({
     };
   }, [imageMap]);
 
-  const texture = imageTexture ?? proceduralTexture;
+  const texture = imageTexture ?? proceduralMap;
+  const glowing = isResidential && !imageTexture;
 
   return (
     <group {...props}>
@@ -166,9 +295,10 @@ export function Teardrop({
           color={color}
           map={texture}
           bumpMap={texture}
-          bumpScale={0.045}
-          emissive={emissive ?? "#000000"}
-          emissiveIntensity={emissive ? emissiveIntensity : 0}
+          bumpScale={glowing ? 0.03 : 0.045}
+          emissiveMap={glowing ? proceduralEmissiveMap : undefined}
+          emissive={glowing ? "#ffffff" : emissive ?? "#000000"}
+          emissiveIntensity={glowing ? 0.9 : emissive ? emissiveIntensity : 0}
         />
       </mesh>
     </group>
