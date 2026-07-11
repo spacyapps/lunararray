@@ -1,5 +1,9 @@
+import Link from "next/link";
+
 // Brand mark + wordmark + tagline on the left; nav on the right.
-// "Tsukibase" is the external sister-site link.
+// "Tsukibase" is the external sister-site link. "Array Map" is the one live
+// link in the nav — the rest are decorative anchors on this single-frame
+// page — so it goes first, right after the pip.
 export default function Topbar() {
   return (
     <div className="la-topbar">
@@ -12,6 +16,7 @@ export default function Topbar() {
       </div>
       <nav className="la-nav">
         <span className="pip" />
+        <Link href="/map">Array Map</Link>
         <a href="#status">Status</a>
         <a href="#beacons">Beacons</a>
         <a href="#access">Access</a>

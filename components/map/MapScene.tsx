@@ -5,6 +5,7 @@
 // local scene (slow cinematic orbit) → Esc / "Return to array" flies back.
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import Moon from "./Moon";
@@ -126,11 +127,20 @@ export default function MapScene() {
         }}
       />
 
-      {/* Overlay — top-left identity */}
-      <div style={{ position: "absolute", top: 28, left: 32, pointerEvents: "none" }}>
-        <div style={{ ...mono, fontSize: 11, letterSpacing: "0.3em", color: "var(--ink)" }}>
-          LunarArray · Network Map
-        </div>
+      {/* Overlay — top-left identity, doubling as the way back to the site */}
+      <div style={{ position: "absolute", top: 28, left: 32 }}>
+        <Link
+          href="/"
+          style={{
+            ...mono,
+            fontSize: 11,
+            letterSpacing: "0.3em",
+            color: "var(--ink)",
+            textDecoration: "none",
+          }}
+        >
+          ← LunarArray · Network Map
+        </Link>
         <div
           style={{
             ...mono,
@@ -138,6 +148,7 @@ export default function MapScene() {
             letterSpacing: "0.22em",
             color: "var(--ink-ghost)",
             marginTop: 6,
+            pointerEvents: "none",
           }}
         >
           {onMap
