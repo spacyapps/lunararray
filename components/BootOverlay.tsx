@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
+import { unlockAccess } from "@/lib/access";
 
 // SSR-safe "are we on the client yet" check — returns false during SSR and the
 // hydration pass, true afterwards, without tripping a hydration mismatch.
@@ -53,7 +54,15 @@ export default function BootOverlay({
       if (i < BOOT_LINES.length) {
         ids.push(setTimeout(next, 280 + Math.random() * 180));
       } else {
-        ids.push(setTimeout(() => setProgress(100), 80));
+        // Full clearance is denied, but the request itself is what unlocks
+        // the Array Map nav link — a consolation telemetry feed while
+        // clearance is pending.
+        ids.push(
+          setTimeout(() => {
+            setProgress(100);
+            unlockAccess();
+          }, 80),
+        );
       }
     }
     ids.push(setTimeout(next, 120));

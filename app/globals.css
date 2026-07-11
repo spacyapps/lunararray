@@ -186,6 +186,23 @@ body {
   opacity: 0.6;
   font-family: var(--sans);
 }
+.la-nav .locked {
+  color: var(--ink-ghost);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  font-weight: 500;
+  opacity: 0.4;
+  cursor: default;
+  user-select: none;
+}
+.la-nav .locked::after {
+  content: "· locked";
+  margin-left: 6px;
+  opacity: 0.7;
+  letter-spacing: 0.1em;
+}
 .la-nav .pip {
   width: 6px;
   height: 6px;
