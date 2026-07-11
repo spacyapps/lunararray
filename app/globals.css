@@ -513,10 +513,10 @@ body {
    DOM overlay, normal scale — avoids the heavily-scaled-SVG square artifact. */
 .la-moonarray {
   position: absolute;
-  /* Anchored over the near-side mare (the dark patch) in the NASA photo,
-     not the disc centre. Offset = (+0.18, -0.09) of the disc square. */
-  left: 67.4%;
-  top: 41.2%;
+  /* Centered on the disc — matches the 3D map, where the octogram sits on
+     the sub-Earth point at the dead center of the near-side hemisphere. */
+  left: 50%;
+  top: 50%;
   width: 28%;
   height: 28%;
   transform: translate(-50%, -50%);
