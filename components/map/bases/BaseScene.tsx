@@ -9,6 +9,7 @@ import BaseEnvironment from "./BaseEnvironment";
 import LA00 from "./LA00";
 import LA01 from "./LA01";
 import LA02 from "./LA02";
+import LA03 from "./LA03";
 
 function PlaceholderBase({ station }: { station: Station }) {
   return (
@@ -45,6 +46,8 @@ export default function BaseScene({ station }: { station: Station }) {
       return <LA01 />;
     case "LA-02":
       return <LA02 />;
+    case "LA-03":
+      return <LA03 />;
     default:
       return <PlaceholderBase station={station} />;
   }
