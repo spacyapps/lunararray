@@ -1,16 +1,22 @@
 "use client";
 
-// Procedural Moon for the 3D map. The color/bump texture is drawn onto a
-// canvas from the same MARIA/CRATERS data as the 2D globe, so both views
-// show the same face. No external images.
+// Procedural Moon for the 3D map, with the real NASA photo (same
+// /moon-nasa.jpg used on the landing page hero) reprojected onto the near
+// (Earth-facing) hemisphere for a sharp, authentic "money shot" face. The
+// far hemisphere — which no photo of the real Moon shows anyway, since it's
+// never visible from Earth — stays procedural, generated from the same
+// MARIA/CRATERS data as the 2D globe. A soft feather blends the two where
+// they meet near the limb.
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { CRATERS, MARIA, smallCraters, tychoRays, C } from "@/lib/octogram-geometry";
 
 export const MOON_RADIUS = 2;
 
 const D2R = Math.PI / 180;
+const TEX_W = 2048;
+const TEX_H = 1024;
 
 function seedRand(i: number): number {
   const x = Math.sin(i * 12.9898 + 78.233) * 43758.5453;
@@ -29,14 +35,7 @@ function angDeg(unit: number): number {
   return Math.asin(Math.min(1, unit)) / D2R;
 }
 
-function drawMoonTexture(): HTMLCanvasElement {
-  const w = 2048;
-  const h = 1024;
-  const cv = document.createElement("canvas");
-  cv.width = w;
-  cv.height = h;
-  const ctx = cv.getContext("2d")!;
-
+function drawProceduralBase(ctx: CanvasRenderingContext2D, w: number, h: number) {
   // Highland base with soft mottling
   ctx.fillStyle = C.moonMid;
   ctx.fillRect(0, 0, w, h);
@@ -160,7 +159,98 @@ function drawMoonTexture(): HTMLCanvasElement {
     }
   }
   ctx.globalAlpha = 1;
+}
 
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+// The photo's disc fills ~98% of the square frame (measured), centered.
+// Sample slightly inside that so grazing rays never pick up the black
+// letterboxing around the disc.
+const PHOTO_SCALE = 0.965;
+// Feather band (in z = cos(lat)cos(lon), i.e. cosine of angle from the
+// sub-camera point) where the real photo fades into the procedural far
+// side — a few degrees is enough since both sides read as grayscale rock.
+const FEATHER_Z = 0.16;
+
+// Reproject the orthographic disc photo onto the near-hemisphere band of
+// the equirect canvas (lon -90..90, all lat — exactly half the canvas
+// width, since that's the visible hemisphere from directly in front) and
+// composite it over the procedural base with a soft edge feather.
+function paintPhotoHemisphere(
+  mainCtx: CanvasRenderingContext2D,
+  img: HTMLImageElement,
+  w: number,
+  h: number,
+) {
+  const sw = img.naturalWidth;
+  const sh = img.naturalHeight;
+  const srcCanvas = document.createElement("canvas");
+  srcCanvas.width = sw;
+  srcCanvas.height = sh;
+  const srcCtx = srcCanvas.getContext("2d")!;
+  srcCtx.drawImage(img, 0, 0);
+  const src = srcCtx.getImageData(0, 0, sw, sh).data;
+
+  const destW = Math.round(w / 2);
+  const destH = h;
+  const dest = mainCtx.createImageData(destW, destH);
+
+  for (let py_ = 0; py_ < destH; py_++) {
+    const lat = 90 - (py_ / destH) * 180;
+    const latR = lat * D2R;
+    const sinLat = Math.sin(latR);
+    const cosLat = Math.cos(latR);
+    for (let px_ = 0; px_ < destW; px_++) {
+      const lon = (px_ / destW) * 180 - 90;
+      const lonR = lon * D2R;
+      const x = cosLat * Math.sin(lonR);
+      const y = sinLat;
+      const z = cosLat * Math.cos(lonR);
+      if (z <= 0) continue;
+
+      const su = 0.5 + (x / PHOTO_SCALE) * 0.5;
+      const sv = 0.5 - (y / PHOTO_SCALE) * 0.5;
+      if (su < 0 || su > 1 || sv < 0 || sv > 1) continue;
+      const sx = Math.min(sw - 1, Math.max(0, Math.round(su * sw)));
+      const sy = Math.min(sh - 1, Math.max(0, Math.round(sv * sh)));
+      const si = (sy * sw + sx) * 4;
+
+      const alpha = z < FEATHER_Z ? z / FEATHER_Z : 1;
+      const di = (py_ * destW + px_) * 4;
+      dest.data[di] = src[si];
+      dest.data[di + 1] = src[si + 1];
+      dest.data[di + 2] = src[si + 2];
+      dest.data[di + 3] = Math.round(255 * alpha);
+    }
+  }
+
+  const tempCanvas = document.createElement("canvas");
+  tempCanvas.width = destW;
+  tempCanvas.height = destH;
+  tempCanvas.getContext("2d")!.putImageData(dest, 0, 0);
+  // destX = px(-90, w) = 0 — the visible band starts at the canvas's left edge.
+  mainCtx.drawImage(tempCanvas, 0, 0);
+}
+
+async function buildMoonTexture(): Promise<HTMLCanvasElement> {
+  const cv = document.createElement("canvas");
+  cv.width = TEX_W;
+  cv.height = TEX_H;
+  const ctx = cv.getContext("2d")!;
+  drawProceduralBase(ctx, TEX_W, TEX_H);
+  try {
+    const img = await loadImage("/moon-nasa.jpg");
+    paintPhotoHemisphere(ctx, img, TEX_W, TEX_H);
+  } catch {
+    // photo failed to load — procedural base already drawn, carry on
+  }
   return cv;
 }
 
@@ -186,13 +276,29 @@ const rimFragment = /* glsl */ `
 `;
 
 export default function Moon() {
-  const { map, bump } = useMemo(() => {
-    const canvas = drawMoonTexture();
-    const map = new THREE.CanvasTexture(canvas);
-    map.colorSpace = THREE.SRGBColorSpace;
-    map.anisotropy = 4;
-    return { map, bump: new THREE.CanvasTexture(canvas) };
+  const [textures, setTextures] = useState<{ map: THREE.CanvasTexture; bump: THREE.CanvasTexture } | null>(null);
+  const materialRef = useRef<THREE.MeshStandardMaterial>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    buildMoonTexture().then((canvas) => {
+      if (cancelled) return;
+      const map = new THREE.CanvasTexture(canvas);
+      map.colorSpace = THREE.SRGBColorSpace;
+      map.anisotropy = 4;
+      setTextures({ map, bump: new THREE.CanvasTexture(canvas) });
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  // Assigning `map`/`bumpMap` on an already-compiled material doesn't
+  // recompile its shader on its own — without this the texture is silently
+  // ignored and the sphere stays a flat lit gradient.
+  useEffect(() => {
+    if (materialRef.current) materialRef.current.needsUpdate = true;
+  }, [textures]);
 
   const rimUniforms = useMemo(
     () => ({ uColor: { value: new THREE.Color("#5cd6ff") } }),
@@ -204,8 +310,13 @@ export default function Moon() {
       <mesh>
         <sphereGeometry args={[MOON_RADIUS, 96, 96]} />
         <meshStandardMaterial
-          map={map}
-          bumpMap={bump}
+          ref={materialRef}
+          // Plain white once the texture is in, so the photo reads at full
+          // brightness (map and color multiply) — moonMid is only a tint for
+          // the brief untextured flash before load completes.
+          color={textures ? "#ffffff" : C.moonMid}
+          map={textures?.map}
+          bumpMap={textures?.bump}
           bumpScale={0.6}
           roughness={0.95}
           metalness={0}

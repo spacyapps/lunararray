@@ -91,7 +91,11 @@ export default function MapScene() {
           onReturned={() => setView({ mode: "map" })}
         />
         {/* Mounted only on the map — remounting resets control state after
-            CameraDirector has been flying the camera. */}
+            CameraDirector has been flying the camera. Azimuth/polar are
+            capped to keep the camera inside the real-photo hemisphere —
+            past ~±45° the texture runs out into the procedural far side and
+            the seam between them shows. No autoRotate: it would just drift
+            into that limit and stall, which reads as broken. */}
         {onMap && (
           <OrbitControls
             enablePan={false}
@@ -100,8 +104,10 @@ export default function MapScene() {
             minDistance={3.2}
             maxDistance={10}
             rotateSpeed={0.5}
-            autoRotate
-            autoRotateSpeed={0.12}
+            minAzimuthAngle={-Math.PI * 0.24}
+            maxAzimuthAngle={Math.PI * 0.24}
+            minPolarAngle={Math.PI * 0.32}
+            maxPolarAngle={Math.PI * 0.57}
           />
         )}
       </Canvas>
