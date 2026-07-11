@@ -10,4 +10,5 @@ export const ORBITS: Record<string, OrbitSpec> = {
   "LA-04": { radius: 36, height: 12, focusHeight: 3.5, period: 52 },
   "LA-05": { radius: 40, height: 18, focusHeight: 2, period: 58 },
   "LA-06": { radius: 38, height: 14, focusHeight: 5, period: 54 },
+  "LA-07": { radius: 37, height: 12, focusHeight: 5, period: 50 },
 };
