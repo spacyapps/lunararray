@@ -43,7 +43,7 @@ export default function LA07() {
       {/* the lived-in quarter */}
       {BUILT.map((t, i) => (
         <group key={i} position={[t.x, 0, t.z]} rotation={[0, 0, (seedRand(i * 9 + 1) - 0.5) * 0.08]}>
-          <Teardrop height={t.h} radius={t.r} color={HULL} />
+          <Teardrop height={t.h} radius={t.r} color={HULL} imageMap="/textures/spire-green2.jpg" />
           <WindowBand radius={teardropRadiusAt(t.h, t.r, t.h * 0.32)} position={[0, t.h * 0.32, 0]} color={WARM} thickness={0.07} />
           <WindowBand radius={teardropRadiusAt(t.h, t.r, t.h * 0.55)} position={[0, t.h * 0.55, 0]} color={WARM} thickness={0.06} />
           {i === 0 && <WindowBand radius={teardropRadiusAt(t.h, t.r, t.h * 0.74)} position={[0, t.h * 0.74, 0]} color={ACCENT} thickness={0.05} />}
