@@ -173,11 +173,10 @@ function loadImage(src: string): Promise<HTMLImageElement> {
 // The photo's disc fills ~98% of the square frame (measured), centered.
 // Sample slightly inside that so grazing rays never pick up the black
 // letterboxing around the disc.
-const PHOTO_SCALE = 0.965;
-// Feather band (in z = cos(lat)cos(lon), i.e. cosine of angle from the
-// sub-camera point) where the real photo fades into the procedural far
-// side — a few degrees is enough since both sides read as grayscale rock.
-const FEATHER_Z = 0.16;
+const PHOTO_SCALE = 0.975;
+// Radial feather (in normalized disc radius, 0 at center / 1 at the photo's
+// own circular edge) where the photo fades to transparent before it runs out.
+const FEATHER_R_START = 0.9;
 
 // Reproject the orthographic disc photo onto the near-hemisphere band of
 // the equirect canvas (lon -90..90, all lat — exactly half the canvas
@@ -215,14 +214,20 @@ function paintPhotoHemisphere(
       const z = cosLat * Math.cos(lonR);
       if (z <= 0) continue;
 
+      // Circular cutoff matching the photo's actual disc shape — a square
+      // su/sv bounds check here cuts the poles and left/right meridian off
+      // early (~75°) while letting the diagonals reach further (~90°),
+      // leaving lopsided bright gaps where coverage differs by direction.
+      const rNorm = Math.sqrt(x * x + y * y) / PHOTO_SCALE;
+      if (rNorm > 1) continue;
+
       const su = 0.5 + (x / PHOTO_SCALE) * 0.5;
       const sv = 0.5 - (y / PHOTO_SCALE) * 0.5;
-      if (su < 0 || su > 1 || sv < 0 || sv > 1) continue;
       const sx = Math.min(sw - 1, Math.max(0, Math.round(su * sw)));
       const sy = Math.min(sh - 1, Math.max(0, Math.round(sv * sh)));
       const si = (sy * sw + sx) * 4;
 
-      const alpha = z < FEATHER_Z ? z / FEATHER_Z : 1;
+      const alpha = rNorm > FEATHER_R_START ? Math.max(0, (1 - rNorm) / (1 - FEATHER_R_START)) : 1;
       const di = (py_ * destW + px_) * 4;
       dest.data[di] = src[si];
       dest.data[di + 1] = src[si + 1];
@@ -239,6 +244,36 @@ function paintPhotoHemisphere(
   mainCtx.drawImage(tempCanvas, 0, 0);
 }
 
+// Bake a terminator into the texture itself, centered on the same fixed
+// sub-camera point (lat=0, lon=0) the photo is reprojected onto — not on
+// wherever the (pan-restricted) camera currently looks. Tuned to reach full
+// black (VIGNETTE_DARK) right around where the photo's own circular edge
+// runs out (~77°, given PHOTO_SCALE/FEATHER_R_START above) so there's no gap
+// of "no more photo, not dark yet" showing through as a bright patch — the
+// two fades are lined up to meet at the same boundary.
+const VIGNETTE_FULL = 0.48;
+const VIGNETTE_DARK = 0.19;
+
+function applyTerminatorVignette(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  const imgData = ctx.getImageData(0, 0, w, h);
+  const d = imgData.data;
+  for (let py_ = 0; py_ < h; py_++) {
+    const lat = 90 - (py_ / h) * 180;
+    const cosLat = Math.cos(lat * D2R);
+    for (let px_ = 0; px_ < w; px_++) {
+      const lon = (px_ / w) * 360 - 90;
+      const z = cosLat * Math.cos(lon * D2R);
+      if (z >= VIGNETTE_FULL) continue;
+      const k = z <= VIGNETTE_DARK ? 0 : (z - VIGNETTE_DARK) / (VIGNETTE_FULL - VIGNETTE_DARK);
+      const i = (py_ * w + px_) * 4;
+      d[i] *= k;
+      d[i + 1] *= k;
+      d[i + 2] *= k;
+    }
+  }
+  ctx.putImageData(imgData, 0, 0);
+}
+
 async function buildMoonTexture(): Promise<HTMLCanvasElement> {
   const cv = document.createElement("canvas");
   cv.width = TEX_W;
@@ -251,15 +286,22 @@ async function buildMoonTexture(): Promise<HTMLCanvasElement> {
   } catch {
     // photo failed to load — procedural base already drawn, carry on
   }
+  applyTerminatorVignette(ctx, TEX_W, TEX_H);
   return cv;
 }
 
-// Additive fresnel rim — the anime key-visual glow around the limb.
+// Additive fresnel rim — the anime key-visual glow around the limb. Masked
+// by the same front/back split as the terminator vignette (object-space
+// normal.z, matching cosLat*cosLon) so it only lights the edge of the
+// photographed crescent — otherwise it relit the dark far side uniformly
+// all the way around the silhouette, undoing the vignette right at the seam.
 const rimVertex = /* glsl */ `
   varying vec3 vNormal;
   varying vec3 vView;
+  varying float vFrontZ;
   void main() {
     vNormal = normalize(normalMatrix * normal);
+    vFrontZ = normal.z;
     vec4 mv = modelViewMatrix * vec4(position, 1.0);
     vView = normalize(-mv.xyz);
     gl_Position = projectionMatrix * mv;
@@ -268,10 +310,12 @@ const rimVertex = /* glsl */ `
 const rimFragment = /* glsl */ `
   varying vec3 vNormal;
   varying vec3 vView;
+  varying float vFrontZ;
   uniform vec3 uColor;
   void main() {
     float fres = pow(1.0 - max(dot(vNormal, vView), 0.0), 3.0);
-    gl_FragColor = vec4(uColor, fres * 0.55);
+    float frontMask = smoothstep(-0.3, 0.3, vFrontZ);
+    gl_FragColor = vec4(uColor, fres * 0.55 * frontMask);
   }
 `;
 

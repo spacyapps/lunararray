@@ -93,9 +93,11 @@ export default function MapScene() {
         {/* Mounted only on the map — remounting resets control state after
             CameraDirector has been flying the camera. Azimuth/polar are
             capped to keep the camera inside the real-photo hemisphere —
-            past ~±45° the texture runs out into the procedural far side and
-            the seam between them shows. No autoRotate: it would just drift
-            into that limit and stall, which reads as broken. */}
+            past this the texture thins into the procedural far side. Moon.tsx
+            also bakes a terminator vignette (fading to black) centered on the
+            same point, so any sliver right at the limit reads as shadow
+            rather than a flat, undetailed patch. No autoRotate: it would
+            just drift into the limit and stall, which reads as broken. */}
         {onMap && (
           <OrbitControls
             enablePan={false}
@@ -104,10 +106,10 @@ export default function MapScene() {
             minDistance={3.2}
             maxDistance={10}
             rotateSpeed={0.5}
-            minAzimuthAngle={-Math.PI * 0.24}
-            maxAzimuthAngle={Math.PI * 0.24}
-            minPolarAngle={Math.PI * 0.32}
-            maxPolarAngle={Math.PI * 0.57}
+            minAzimuthAngle={-Math.PI * 0.18}
+            maxAzimuthAngle={Math.PI * 0.18}
+            minPolarAngle={Math.PI * 0.36}
+            maxPolarAngle={Math.PI * 0.53}
           />
         )}
       </Canvas>
