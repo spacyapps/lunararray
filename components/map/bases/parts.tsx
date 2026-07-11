@@ -9,6 +9,92 @@ import { useMemo, useRef } from "react";
 import { useFrame, type ThreeElements } from "@react-three/fiber";
 import * as THREE from "three";
 
+// Neutral-gray detail texture for Teardrop hulls — panel seams, rivets, a
+// grounding AO gradient at the base, faint weathering streaks. Drawn gray
+// (not the hull's own color) so it multiplies against whatever `color` the
+// call site passes, one texture works for every tint. LatheGeometry's UV.v
+// runs 0 (base) -> 1 (tip) in the same order as the profile points below,
+// so panel spacing is computed from the hull's real height, not a fixed
+// count — a tall spire and a short shuttle body both read as built from
+// similarly-sized plates.
+function buildHullTexture(height: number, seed: number): HTMLCanvasElement {
+  const w = 512;
+  const h = 1024;
+  const cv = document.createElement("canvas");
+  cv.width = w;
+  cv.height = h;
+  const ctx = cv.getContext("2d")!;
+
+  ctx.fillStyle = "#9a9a9a";
+  ctx.fillRect(0, 0, w, h);
+
+  const nSeamsV = 10 + Math.floor(seedRand(seed * 3 + 1) * 4);
+  for (let i = 0; i < nSeamsV; i++) {
+    const x = (i / nSeamsV) * w;
+    ctx.strokeStyle = "rgba(0,0,0,0.16)";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, h);
+    ctx.stroke();
+  }
+
+  const seamSpacing = 1.7; // world units per panel ring
+  const nSeamsH = Math.max(2, Math.round(height / seamSpacing));
+  for (let i = 1; i < nSeamsH; i++) {
+    const y = (i / nSeamsH) * h;
+    ctx.strokeStyle = "rgba(0,0,0,0.2)";
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(w, y);
+    ctx.stroke();
+    // bevel catch-light just below each seam
+    ctx.strokeStyle = "rgba(255,255,255,0.09)";
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(0, y + 2.5);
+    ctx.lineTo(w, y + 2.5);
+    ctx.stroke();
+  }
+
+  // sparse rivets at seam intersections
+  ctx.fillStyle = "rgba(0,0,0,0.22)";
+  for (let i = 1; i < nSeamsH; i++) {
+    const y = (i / nSeamsH) * h;
+    for (let j = 0; j < nSeamsV; j++) {
+      if (seedRand(seed + i * 31 + j * 7) > 0.5) continue;
+      const x = (j / nSeamsV) * w;
+      ctx.beginPath();
+      ctx.arc(x, y, 2.4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // grounding AO — texture.flipY means v=0 (hull base) samples canvas
+  // y=h, so the dark end of this gradient belongs at the canvas bottom.
+  const grad = ctx.createLinearGradient(0, h, 0, h * 0.72);
+  grad.addColorStop(0, "rgba(0,0,0,0.38)");
+  grad.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, w, h);
+
+  // faint weathering streaks, concentrated low on the hull
+  for (let i = 0; i < 14; i++) {
+    const x = seedRand(seed * 5 + i * 11) * w;
+    const len = h * (0.15 + seedRand(seed * 7 + i) * 0.25);
+    const y0 = h - len * seedRand(seed * 9 + i * 3);
+    ctx.strokeStyle = `rgba(0,0,0,${(0.05 + seedRand(i) * 0.05).toFixed(3)})`;
+    ctx.lineWidth = 3 + seedRand(i * 2) * 5;
+    ctx.beginPath();
+    ctx.moveTo(x, y0);
+    ctx.lineTo(x + (seedRand(i * 13) - 0.5) * 10, y0 - len);
+    ctx.stroke();
+  }
+
+  return cv;
+}
+
 /** Teardrop hull of `height` along +Y: round belly, tapering to a point. */
 export function Teardrop({
   height = 8,
@@ -16,6 +102,7 @@ export function Teardrop({
   color = "#e8ecf4",
   emissive,
   emissiveIntensity = 0.35,
+  seed,
   ...props
 }: {
   height?: number;
@@ -23,6 +110,7 @@ export function Teardrop({
   color?: string;
   emissive?: string;
   emissiveIntensity?: number;
+  seed?: number;
 } & ThreeElements["group"]) {
   const geometry = useMemo(() => {
     const pts: THREE.Vector2[] = [];
@@ -36,11 +124,24 @@ export function Teardrop({
     pts.push(new THREE.Vector2(0.0001, height));
     return new THREE.LatheGeometry(pts, 48);
   }, [height, radius]);
+
+  const hullSeed = seed ?? Math.round(height * 37 + radius * 131);
+  const texture = useMemo(() => {
+    const canvas = buildHullTexture(height, hullSeed);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 4;
+    return tex;
+  }, [height, hullSeed]);
+
   return (
     <group {...props}>
       <mesh geometry={geometry}>
         <meshToonMaterial
           color={color}
+          map={texture}
+          bumpMap={texture}
+          bumpScale={0.045}
           emissive={emissive ?? "#000000"}
           emissiveIntensity={emissive ? emissiveIntensity : 0}
         />
