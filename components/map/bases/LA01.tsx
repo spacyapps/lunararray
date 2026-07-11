@@ -101,7 +101,7 @@ export default function LA01() {
       {/* dusk key — warm low sun, violet fill */}
       <directionalLight position={[-34, 10, 30]} intensity={2.4} color="#ffc890" />
       <directionalLight position={[36, 16, -30]} intensity={1.2} color="#9a8aff" />
-      <pointLight position={[0, 5, 2]} intensity={50} color={WARM} distance={26} />
+      <pointLight position={[0, 5, 2]} intensity={28} color={WARM} distance={26} />
 
       <BaseEnvironment groundColor="#8a8496" rockTint="#746e82" seed={1} />
 
@@ -112,10 +112,10 @@ export default function LA01() {
           <meshStandardMaterial
             color="#ffe2c0"
             transparent
-            opacity={0.55}
+            opacity={0.45}
             roughness={0.15}
             emissive={WARM}
-            emissiveIntensity={0.4}
+            emissiveIntensity={0.22}
             side={THREE.DoubleSide}
           />
         </mesh>

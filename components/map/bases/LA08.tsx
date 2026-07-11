@@ -9,7 +9,7 @@ import { useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import BaseEnvironment from "./BaseEnvironment";
-import { Beacon, LensDome, Teardrop, WindowBand, seedRand } from "./parts";
+import { Beacon, LensDome, Teardrop, WindowBand, seedRand, teardropRadiusAt } from "./parts";
 
 const ACCENT = "#c48aff";
 const HULL = "#eef2f7";
@@ -76,7 +76,7 @@ export default function LA08() {
           {[0.22, 0.4, 0.58].map((f, j) => (
             <WindowBand
               key={j}
-              radius={t.r * (0.92 - f * 0.62)}
+              radius={teardropRadiusAt(t.h, t.r, t.h * f)}
               position={[0, t.h * f, 0]}
               color={j === 2 && i % 3 === 0 ? ACCENT : WARM}
               thickness={0.06}

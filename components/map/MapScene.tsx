@@ -100,6 +100,8 @@ export default function MapScene() {
             minDistance={3.2}
             maxDistance={10}
             rotateSpeed={0.5}
+            autoRotate
+            autoRotateSpeed={0.12}
           />
         )}
       </Canvas>
@@ -130,7 +132,11 @@ export default function MapScene() {
             marginTop: 6,
           }}
         >
-          {onMap ? "9 nodes · Near side · Octogram" : "On approach"}
+          {onMap
+            ? "9 nodes · Near side · Octogram"
+            : view.mode === "base"
+              ? "Station orbit · Esc to return"
+              : "On approach"}
         </div>
       </div>
 

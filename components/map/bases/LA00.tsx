@@ -7,7 +7,7 @@
 // parked, one pad live.
 
 import BaseEnvironment from "./BaseEnvironment";
-import { Beacon, Dish, LensDome, Pad, SweepTube, Teardrop, WindowBand } from "./parts";
+import { Beacon, Dish, LensDome, Pad, SweepTube, Teardrop, WindowBand, teardropRadiusAt } from "./parts";
 
 const ACCENT = "#5cd6ff";
 const HULL = "#eef2f7";
@@ -51,9 +51,9 @@ export default function LA00() {
       {/* control spire — tall teardrop, leaning just off vertical */}
       <group rotation={[0, 0, -0.07]}>
         <Teardrop height={19} radius={3.4} color={HULL} />
-        <WindowBand radius={2.65} position={[0, 6.2, 0]} color={WARM} />
-        <WindowBand radius={2.1} position={[0, 9.4, 0]} color={WARM} />
-        <WindowBand radius={1.45} position={[0, 12.4, 0]} color={ACCENT} thickness={0.06} />
+        <WindowBand radius={teardropRadiusAt(19, 3.4, 6.2)} position={[0, 6.2, 0]} color={WARM} />
+        <WindowBand radius={teardropRadiusAt(19, 3.4, 9.4)} position={[0, 9.4, 0]} color={WARM} />
+        <WindowBand radius={teardropRadiusAt(19, 3.4, 12.4)} position={[0, 12.4, 0]} color={ACCENT} thickness={0.06} />
         <Beacon color={ACCENT} size={0.3} position={[-1.35, 19.2, 0]} />
       </group>
 

@@ -242,6 +242,13 @@ export function WindowBand({
   );
 }
 
+/** Hull radius of a Teardrop(height, radius) at height y — for placing
+ *  window bands so they sit on the skin instead of inside it. */
+export function teardropRadiusAt(height: number, radius: number, y: number): number {
+  const u = Math.min(1, Math.max(0, y / height));
+  return radius * Math.sin(Math.PI * Math.pow(u, 0.62)) * (1 - u * 0.12) + 0.04;
+}
+
 /** Deterministic pseudo-random, shared convention across the map. */
 export function seedRand(i: number): number {
   const x = Math.sin(i * 12.9898 + 78.233) * 43758.5453;

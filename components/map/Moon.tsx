@@ -58,17 +58,22 @@ function drawMoonTexture(): HTMLCanvasElement {
     const mare = MARIA[m];
     const cx = px(mare.lon, w);
     const cy = py(mare.lat, h);
-    const stretch = 1 / Math.max(0.25, Math.cos(mare.lat * D2R));
+    // cap the equirect stretch near the poles: high-lat maria (Frigoris)
+    // otherwise smear into petals converging on the pole
+    const stretch = 1 / Math.max(0.62, Math.cos(mare.lat * D2R));
+    const highLat = Math.abs(mare.lat) > 45;
+    const jitterK = highLat ? 0.18 : 0.5;
     const rx = (angDeg(mare.rx) / 360) * w * stretch;
     const ry = (angDeg(mare.ry) / 180) * h;
     for (let j = 0; j < 7; j++) {
-      const jx = (seedRand(m * 31 + j * 7 + 1) - 0.5) * rx * 0.5;
-      const jy = (seedRand(m * 37 + j * 11 + 2) - 0.5) * ry * 0.5;
+      const jx = (seedRand(m * 31 + j * 7 + 1) - 0.5) * rx * jitterK;
+      const jy = (seedRand(m * 37 + j * 11 + 2) - 0.5) * ry * jitterK;
       const sr = 0.55 + seedRand(m * 13 + j * 3) * 0.55;
       ctx.fillStyle = C.mare;
       ctx.globalAlpha = 0.5;
       ctx.beginPath();
-      ctx.ellipse(cx + jx, cy + jy, rx * sr, ry * sr, seedRand(m + j) * Math.PI, 0, Math.PI * 2);
+      // keep long axes horizontal near the poles or they fan into petals
+      ctx.ellipse(cx + jx, cy + jy, rx * sr, ry * sr, highLat ? 0 : seedRand(m + j) * Math.PI, 0, Math.PI * 2);
       ctx.fill();
     }
     // darker core
