@@ -5,7 +5,7 @@
 // tubes), toon-stepped shading, saturated accents and emissive trim.
 // Military scenes deliberately use almost none of these curves.
 
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useFrame, type ThreeElements } from "@react-three/fiber";
 import * as THREE from "three";
 
@@ -103,6 +103,7 @@ export function Teardrop({
   emissive,
   emissiveIntensity = 0.35,
   seed,
+  imageMap,
   ...props
 }: {
   height?: number;
@@ -111,6 +112,10 @@ export function Teardrop({
   emissive?: string;
   emissiveIntensity?: number;
   seed?: number;
+  /** Hand-picked hero override — an AI-generated (e.g. Grok Imagine) image
+   *  under public/textures/, wired in per AGENTS.md's named-exception policy.
+   *  Falls back to the procedural texture while it loads or if absent. */
+  imageMap?: string;
 } & ThreeElements["group"]) {
   const geometry = useMemo(() => {
     const pts: THREE.Vector2[] = [];
@@ -126,13 +131,33 @@ export function Teardrop({
   }, [height, radius]);
 
   const hullSeed = seed ?? Math.round(height * 37 + radius * 131);
-  const texture = useMemo(() => {
+  const proceduralTexture = useMemo(() => {
     const canvas = buildHullTexture(height, hullSeed);
     const tex = new THREE.CanvasTexture(canvas);
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.anisotropy = 4;
     return tex;
   }, [height, hullSeed]);
+
+  // imageMap is a fixed per-instance override (set once at the call site,
+  // never toggled at runtime), so there's no "revert to procedural" case to
+  // handle here — only the async load needs to set state.
+  const [imageTexture, setImageTexture] = useState<THREE.Texture | null>(null);
+  useEffect(() => {
+    if (!imageMap) return;
+    let cancelled = false;
+    new THREE.TextureLoader().load(imageMap, (tex) => {
+      if (cancelled) return;
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = 4;
+      setImageTexture(tex);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [imageMap]);
+
+  const texture = imageTexture ?? proceduralTexture;
 
   return (
     <group {...props}>
