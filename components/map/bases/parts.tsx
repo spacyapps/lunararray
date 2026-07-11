@@ -697,6 +697,36 @@ export function Beacon({
   );
 }
 
+/** Iridescent chrome accent ring, for a spire tip or other crowning point.
+ *  Uses meshPhysicalMaterial's built-in `iridescence` — a real, cheap
+ *  view-dependent rainbow-chrome sheen (like a soap bubble or anodized
+ *  titanium) that shifts as the camera orbits, unlike a rainbow baked into
+ *  a texture, which would look painted-on and static from every angle. */
+export function ChromeCrown({
+  radius = 0.6,
+  thickness = 0.18,
+  ...props
+}: {
+  radius?: number;
+  thickness?: number;
+} & ThreeElements["group"]) {
+  return (
+    <group {...props}>
+      <mesh rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[radius, thickness, 20, 48]} />
+        <meshPhysicalMaterial
+          color="#d8dce6"
+          metalness={0.4}
+          roughness={0.15}
+          iridescence={1}
+          iridescenceIOR={1.9}
+          iridescenceThicknessRange={[200, 800]}
+        />
+      </mesh>
+    </group>
+  );
+}
+
 /** Flat glowing band wrapped around a radius — reads as lit windows. */
 export function WindowBand({
   radius = 3,
