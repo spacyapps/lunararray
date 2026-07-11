@@ -2,4 +2,6 @@
 
 import { OrbitSpec } from "../view";
 
-export const ORBITS: Record<string, OrbitSpec> = {};
+export const ORBITS: Record<string, OrbitSpec> = {
+  "LA-00": { radius: 32, height: 13, focusHeight: 5, period: 50 },
+};
