@@ -42,11 +42,15 @@ export default function CameraDirector({
   fadeRef: React.RefObject<HTMLDivElement | null>;
 }) {
   const camera = useThree((s) => s.camera);
+  // `fired` guards the completion callback: the state flip is async, so the
+  // frame loop can run again while the old mode is still current — clearing
+  // the record there would restart the animation from its first frame.
   const anim = useRef<{
     key: string;
     t0: number;
     fromPos: THREE.Vector3;
     fromFocus: THREE.Vector3;
+    fired?: boolean;
   } | null>(null);
   const baseT0 = useRef<number | null>(null);
   const focus = useRef(new THREE.Vector3());
@@ -84,14 +88,15 @@ export default function CameraDirector({
       camera.lookAt(focus.current);
       // fade to black over the last stretch of the dive
       setFade((t - 0.72) / 0.28);
-      if (t >= 1) {
-        anim.current = null;
+      if (t >= 1 && !a.fired) {
+        a.fired = true;
         onArrived();
       }
       return;
     }
 
     if (view.mode === "base") {
+      anim.current = null;
       const spec: OrbitSpec = ORBITS[view.id] ?? DEFAULT_ORBIT;
       if (baseT0.current === null) baseT0.current = now;
       const t = now - baseT0.current;
@@ -130,8 +135,11 @@ export default function CameraDirector({
       focus.current.lerpVectors(a.fromFocus, new THREE.Vector3(0, 0, 0), Math.min(1, e * 1.4));
       camera.lookAt(focus.current);
       setFade(1 - t / 0.3);
-      if (t >= 1) {
-        anim.current = null;
+      if (t >= 1 && !a.fired) {
+        a.fired = true;
+        // land exactly on the map pose before OrbitControls remounts
+        camera.position.copy(MAP_CAM);
+        camera.lookAt(0, 0, 0);
         onReturned();
       }
       return;

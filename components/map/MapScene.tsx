@@ -90,15 +90,18 @@ export default function MapScene() {
           onArrived={() => setView((v) => (v.mode === "dive" ? { mode: "base", id: v.id } : v))}
           onReturned={() => setView({ mode: "map" })}
         />
-        <OrbitControls
-          enabled={onMap}
-          enablePan={false}
-          enableDamping
-          dampingFactor={0.08}
-          minDistance={3.2}
-          maxDistance={10}
-          rotateSpeed={0.5}
-        />
+        {/* Mounted only on the map — remounting resets control state after
+            CameraDirector has been flying the camera. */}
+        {onMap && (
+          <OrbitControls
+            enablePan={false}
+            enableDamping
+            dampingFactor={0.08}
+            minDistance={3.2}
+            maxDistance={10}
+            rotateSpeed={0.5}
+          />
+        )}
       </Canvas>
 
       {/* Transition fade layer */}
