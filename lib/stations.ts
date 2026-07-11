@@ -57,6 +57,18 @@ export const STATIONS: Station[] = [
   station("LA-08", "Imbrium", "City — residential core", "house", 315, "#c48aff"),
 ];
 
+/** Display exaggeration for the 3D map view. At true scale the octogram
+ *  spans ~3° (~180 km) — a single dot on a whole-moon view (the landing page
+ *  needs a ×4300 inset for the same reason). The map view spreads the ring to
+ *  this angular radius, preserving relative positions. */
+export const MAP_OCTO_DEG = 22;
+
+/** Station lat/lon at map-display scale (exaggerated ring radius). */
+export function mapLatLon(s: Station): { lat: number; lon: number } {
+  if (s.angle === null) return { lat: 0, lon: 0 };
+  return bearingPoint(MAP_OCTO_DEG, s.angle);
+}
+
 /** Convert lunar lat/lon to a Three.js position on a sphere of radius r.
  *  +Z faces the viewer (sub-Earth point, LA-00), +Y is lunar north. */
 export function latLonToVec3(
