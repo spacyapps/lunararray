@@ -50,7 +50,7 @@ export default function LA00() {
 
       {/* control spire — tall teardrop, leaning just off vertical */}
       <group rotation={[0, 0, -0.07]}>
-        <Teardrop height={19} radius={3.4} color={HULL} />
+        <Teardrop height={19} radius={3.4} color={HULL} imageMap="/textures/la00-spire-hull.jpg" />
         <WindowBand radius={teardropRadiusAt(19, 3.4, 6.2)} position={[0, 6.2, 0]} color={WARM} />
         <WindowBand radius={teardropRadiusAt(19, 3.4, 9.4)} position={[0, 9.4, 0]} color={WARM} />
         <WindowBand radius={teardropRadiusAt(19, 3.4, 12.4)} position={[0, 12.4, 0]} color={ACCENT} thickness={0.06} />
