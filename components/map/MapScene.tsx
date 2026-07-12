@@ -88,9 +88,17 @@ export default function MapScene() {
           />
         </group>
 
-        {/* Local base scene (origin), mounted from dive so it's warm on arrival */}
+        {/* Local base scene (origin), mounted from dive so it's warm on
+            arrival. Scaled to ~0 rather than hidden via `visible` — an
+            invisible object is skipped by the renderer entirely, so its
+            shaders/textures never actually compile/upload until the frame
+            it's revealed, which is exactly the stall that caused the flash.
+            Scaled tiny, it still renders every frame (paying that cost
+            during the 2.4s dive instead), and sits buried inside the opaque
+            moon anyway — both share the world origin — so there's nothing
+            to see even at scale=1 the moment it starts warming. */}
         {mountBase && active && (
-          <group visible={view.mode === "base"}>
+          <group scale={view.mode === "base" ? 1 : 0.001}>
             <BaseScene station={active} />
           </group>
         )}

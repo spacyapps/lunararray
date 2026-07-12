@@ -18,6 +18,10 @@ import { View, DIVE_DUR, RISE_DUR, easeInOut, DEFAULT_ORBIT, OrbitSpec } from ".
 import { ORBITS } from "./bases/orbits";
 
 const MAP_CAM = new THREE.Vector3(0, 0.9, 6.4);
+// Extra beat at full black after the dive animation completes, before
+// handing off to "base" mode — cheap insurance against any one-frame
+// discontinuity (camera snap, React re-render timing) landing visibly.
+const ARRIVAL_HOLD = 0.15;
 
 function stationWorld(id: string): THREE.Vector3 {
   const s = STATIONS.find((st) => st.id === id)!;
@@ -51,6 +55,7 @@ export default function CameraDirector({
     fromPos: THREE.Vector3;
     fromFocus: THREE.Vector3;
     fired?: boolean;
+    holdStart?: number;
   } | null>(null);
   const baseT0 = useRef<number | null>(null);
   const focus = useRef(new THREE.Vector3());
@@ -88,9 +93,12 @@ export default function CameraDirector({
       camera.lookAt(focus.current);
       // fade to black over the last stretch of the dive
       setFade((t - 0.72) / 0.28);
-      if (t >= 1 && !a.fired) {
-        a.fired = true;
-        onArrived();
+      if (t >= 1) {
+        if (a.holdStart === undefined) a.holdStart = now;
+        if (!a.fired && now - a.holdStart >= ARRIVAL_HOLD) {
+          a.fired = true;
+          onArrived();
+        }
       }
       return;
     }

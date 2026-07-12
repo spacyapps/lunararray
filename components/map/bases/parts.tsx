@@ -146,46 +146,71 @@ function buildResidentialTextures(
   mctx.fillStyle = "#c8c6d6";
   mctx.fillRect(0, 0, w, h);
 
+  // Batched into one path + one stroke/fill per group, instead of hundreds
+  // of individual fillRect/stroke calls (a beginPath+moveTo+lineTo+stroke
+  // per tick, times ~40 ticks, times every third floor, times every tower
+  // on a base like LA-08's 10-tower ring, was real synchronous main-thread
+  // cost — enough to stall a whole animation frame right as a dive was
+  // fading in).
+  const eaveLinesByRank: [number, number][][] = [[], [], []]; // one bucket per k (0,1,2) — each ring's line always has the same k-based opacity, so bucketing by k directly avoids re-deriving/comparing floats
+  const patioBands: { py: number; ph: number }[] = [];
+  const patioTicks: { x: number; py: number; ph: number }[] = [];
+
   for (let f = 0; f < nFloors; f++) {
     const yBot = h - (f / nFloors) * h;
     const yTop = h - ((f + 1) / nFloors) * h;
     const floorH = yBot - yTop;
 
-    // roofline eave cluster — a few close lines rather than one seam
     if (f < nFloors - 1) {
-      for (let k = 0; k < 3; k++) {
-        mctx.strokeStyle = `rgba(0,0,0,${(0.15 - k * 0.035).toFixed(3)})`;
-        mctx.lineWidth = 1.3;
-        mctx.beginPath();
-        mctx.moveTo(0, yTop + k * 2.2);
-        mctx.lineTo(w, yTop + k * 2.2);
-        mctx.stroke();
-      }
+      for (let k = 0; k < 3; k++) eaveLinesByRank[k].push([yTop + k * 2.2, yTop + k * 2.2]);
     }
 
-    // periodic patio/balcony band with a railing tick pattern
     if (f > 0 && f % 3 === 0) {
       const py = yBot - floorH * 0.14;
       const ph = floorH * 0.1;
-      mctx.fillStyle = "rgba(0,0,0,0.12)";
-      mctx.fillRect(0, py, w, ph);
+      patioBands.push({ py, ph });
       const nTicks = 40;
-      mctx.strokeStyle = "rgba(0,0,0,0.18)";
-      mctx.lineWidth = 1;
-      for (let t = 0; t < nTicks; t++) {
-        const x = (t / nTicks) * w;
-        mctx.beginPath();
-        mctx.moveTo(x, py);
-        mctx.lineTo(x, py + ph);
-        mctx.stroke();
-      }
+      for (let t = 0; t < nTicks; t++) patioTicks.push({ x: (t / nTicks) * w, py, ph });
     }
   }
 
-  for (const win of windows) {
-    mctx.fillStyle = win.lit ? "rgba(0,0,0,0.05)" : "rgba(0,0,0,0.28)";
-    mctx.fillRect(win.x, win.yTop, win.w, win.h);
+  for (let k = 0; k < 3; k++) {
+    mctx.strokeStyle = `rgba(0,0,0,${(0.15 - k * 0.035).toFixed(3)})`;
+    mctx.lineWidth = 1.3;
+    mctx.beginPath();
+    for (const [y0, y1] of eaveLinesByRank[k]) {
+      mctx.moveTo(0, y0);
+      mctx.lineTo(w, y1);
+    }
+    mctx.stroke();
   }
+
+  mctx.fillStyle = "rgba(0,0,0,0.12)";
+  for (const band of patioBands) mctx.fillRect(0, band.py, w, band.ph);
+
+  mctx.strokeStyle = "rgba(0,0,0,0.18)";
+  mctx.lineWidth = 1;
+  mctx.beginPath();
+  for (const tick of patioTicks) {
+    mctx.moveTo(tick.x, tick.py);
+    mctx.lineTo(tick.x, tick.py + tick.ph);
+  }
+  mctx.stroke();
+
+  mctx.fillStyle = "rgba(0,0,0,0.28)";
+  mctx.beginPath();
+  for (const win of windows) {
+    if (win.lit) continue;
+    mctx.rect(win.x, win.yTop, win.w, win.h);
+  }
+  mctx.fill();
+  mctx.fillStyle = "rgba(0,0,0,0.05)";
+  mctx.beginPath();
+  for (const win of windows) {
+    if (!win.lit) continue;
+    mctx.rect(win.x, win.yTop, win.w, win.h);
+  }
+  mctx.fill();
 
   const grad = mctx.createLinearGradient(0, h, 0, h * 0.85);
   grad.addColorStop(0, "rgba(0,0,0,0.3)");
@@ -199,11 +224,20 @@ function buildResidentialTextures(
   const ectx = emissive.getContext("2d")!;
   ectx.fillStyle = "#000000";
   ectx.fillRect(0, 0, w, h);
+  ectx.fillStyle = "#ffd9a0";
+  ectx.beginPath();
   for (const win of windows) {
-    if (!win.lit) continue;
-    ectx.fillStyle = win.cool ? "#a8d8ff" : "#ffd9a0";
-    ectx.fillRect(win.x, win.yTop, win.w, win.h);
+    if (!win.lit || win.cool) continue;
+    ectx.rect(win.x, win.yTop, win.w, win.h);
   }
+  ectx.fill();
+  ectx.fillStyle = "#a8d8ff";
+  ectx.beginPath();
+  for (const win of windows) {
+    if (!win.lit || !win.cool) continue;
+    ectx.rect(win.x, win.yTop, win.w, win.h);
+  }
+  ectx.fill();
 
   return { map, emissive };
 }
@@ -250,22 +284,28 @@ export function Teardrop({
 
   const hullSeed = seed ?? Math.round(height * 37 + radius * 131);
   const isResidential = variant === "residential";
+  // buildResidentialTextures does real per-window canvas work (a base like
+  // LA-08 has 10 of these) — computing it once and deriving both textures
+  // from that one pass, instead of calling it twice and throwing half of
+  // each result away, was previously doubling that cost for no reason.
+  const residentialCanvases = useMemo(() => {
+    if (!isResidential) return null;
+    return buildResidentialTextures(height, hullSeed);
+  }, [height, hullSeed, isResidential]);
   const proceduralMap = useMemo(() => {
-    const canvas = isResidential
-      ? buildResidentialTextures(height, hullSeed).map
-      : buildHullTexture(height, hullSeed);
+    const canvas = residentialCanvases ? residentialCanvases.map : buildHullTexture(height, hullSeed);
     const tex = new THREE.CanvasTexture(canvas);
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.anisotropy = 4;
     return tex;
-  }, [height, hullSeed, isResidential]);
+  }, [height, hullSeed, residentialCanvases]);
   const proceduralEmissiveMap = useMemo(() => {
-    if (!isResidential) return null;
-    const tex = new THREE.CanvasTexture(buildResidentialTextures(height, hullSeed).emissive);
+    if (!residentialCanvases) return null;
+    const tex = new THREE.CanvasTexture(residentialCanvases.emissive);
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.anisotropy = 4;
     return tex;
-  }, [height, hullSeed, isResidential]);
+  }, [residentialCanvases]);
 
   // imageMap is a fixed per-instance override (set once at the call site,
   // never toggled at runtime), so there's no "revert to procedural" case to
