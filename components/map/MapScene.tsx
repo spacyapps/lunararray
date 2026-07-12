@@ -108,6 +108,7 @@ export default function MapScene() {
         <CameraDirector
           view={view}
           fadeRef={fadeRef}
+          deepLink={isDeepLink}
           onArrived={() => setView((v) => (v.mode === "dive" ? { mode: "base", id: v.id } : v))}
           onReturned={() => setView({ mode: "map" })}
         />
@@ -135,14 +136,18 @@ export default function MapScene() {
         )}
       </Canvas>
 
-      {/* Transition fade layer */}
+      {/* Transition fade layer. Starts already opaque on a deep link — the
+          first paint here happens before CameraDirector's first useFrame
+          tick, so if this started at 0 there'd be a one-frame gap where
+          whatever's mid-generation (moon texture, hotspots, starfield) is
+          visible before the hold logic gets a chance to set it back to 1. */}
       <div
         ref={fadeRef}
         style={{
           position: "absolute",
           inset: 0,
           background: "#05060a",
-          opacity: 0,
+          opacity: isDeepLink ? 1 : 0,
           pointerEvents: "none",
         }}
       />

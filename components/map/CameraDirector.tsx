@@ -14,7 +14,18 @@ import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { STATIONS, latLonToVec3, mapLatLon } from "@/lib/stations";
 import { MOON_RADIUS } from "./Moon";
-import { View, DIVE_DUR, RISE_DUR, easeInOut, DEFAULT_ORBIT, OrbitSpec, MAP_CAM_POS, MAP_FOV } from "./view";
+import {
+  View,
+  DIVE_DUR,
+  RISE_DUR,
+  easeInOut,
+  DEFAULT_ORBIT,
+  OrbitSpec,
+  MAP_CAM_POS,
+  MAP_FOV,
+  DEEP_LINK_HOLD,
+  DEEP_LINK_REVEAL,
+} from "./view";
 import { ORBITS } from "./bases/orbits";
 
 const MAP_CAM = new THREE.Vector3(...MAP_CAM_POS);
@@ -49,11 +60,15 @@ export default function CameraDirector({
   onArrived,
   onReturned,
   fadeRef,
+  deepLink = false,
 }: {
   view: View;
   onArrived: () => void;
   onReturned: () => void;
   fadeRef: React.RefObject<HTMLDivElement | null>;
+  /** True when `view`'s initial dive came from the landing page's
+   *  ?station=ID deep link rather than a hotspot click already on /map. */
+  deepLink?: boolean;
 }) {
   const camera = useThree((s) => s.camera);
   // `fired` guards the completion callback: the state flip is async, so the
@@ -65,11 +80,17 @@ export default function CameraDirector({
     fromPos: THREE.Vector3;
     fromFocus: THREE.Vector3;
     fromFov: number;
+    held: boolean;
     fired?: boolean;
     holdStart?: number;
   } | null>(null);
   const baseT0 = useRef<number | null>(null);
   const focus = useRef(new THREE.Vector3());
+  // The hold only applies to the very first dive (the deep-linked one) — a
+  // later hotspot click after returning to the map is already warm and
+  // shouldn't pay it again, even though the `deepLink` prop itself doesn't
+  // change across the session.
+  const deepLinkConsumed = useRef(false);
 
   const setFade = (v: number) => {
     if (fadeRef.current) fadeRef.current.style.opacity = String(Math.min(1, Math.max(0, v)));
@@ -87,10 +108,16 @@ export default function CameraDirector({
     if (view.mode === "dive") {
       const key = `dive-${view.id}`;
       const pCam = camera as THREE.PerspectiveCamera;
+      const holdThisDive = deepLink && !deepLinkConsumed.current;
       if (anim.current?.key !== key) {
+        deepLinkConsumed.current = true;
         anim.current = {
           key,
-          t0: now,
+          // Deep link: push the dive's own t0 into the future by the hold
+          // duration. Until then we sit at full black without touching the
+          // camera at all, so first-mount generation (moon texture,
+          // hotspots, starfield) finishes with nothing on screen to flash.
+          t0: now + (holdThisDive ? DEEP_LINK_HOLD : 0),
           fromPos: camera.position.clone(),
           fromFocus: new THREE.Vector3(0, 0, 0),
           // A deep link from the landing page starts the Canvas at the
@@ -99,9 +126,14 @@ export default function CameraDirector({
           // in-page dive (already at MAP_FOV) is a no-op, and a deep-linked
           // one lands at the same framing base/rise/map always use.
           fromFov: pCam.fov,
+          held: holdThisDive,
         };
       }
       const a = anim.current;
+      if (now < a.t0) {
+        setFade(1);
+        return;
+      }
       const t = Math.min(1, (now - a.t0) / DIVE_DUR);
       const e = easeInOut(t);
       const target = divePoint(view.id);
@@ -112,8 +144,12 @@ export default function CameraDirector({
       if (a.fromFov !== MAP_FOV) {
         applyFov(pCam, THREE.MathUtils.lerp(a.fromFov, MAP_FOV, e));
       }
+      // reveal from the hold (deep link only — false for a normal in-page
+      // dive, so it never affects the existing end-of-dive fade below) and
       // fade to black over the last stretch of the dive
-      setFade((t - 0.72) / 0.28);
+      const revealFade = a.held ? 1 - Math.min(1, (now - a.t0) / DEEP_LINK_REVEAL) : 0;
+      const endFade = (t - 0.72) / 0.28;
+      setFade(Math.max(revealFade, endFade));
       if (t >= 1) {
         if (a.holdStart === undefined) a.holdStart = now;
         if (!a.fired && now - a.holdStart >= ARRIVAL_HOLD) {
@@ -154,6 +190,7 @@ export default function CameraDirector({
           fromPos: divePoint(view.id),
           fromFocus: stationWorld(view.id),
           fromFov: MAP_FOV,
+          held: false,
         };
         // camera snaps back above the station behind a fade already at black
         setFade(1);

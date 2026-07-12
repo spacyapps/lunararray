@@ -20,6 +20,16 @@ export const MAP_FOV = 42;
 export const EMBED_CAM_POS: [number, number, number] = [0, 0.9, 8.4];
 export const EMBED_FOV = 38;
 
+// A deep-linked dive (landing page → /map?station=ID) is also the very first
+// paint of the Moon, hotspots, and starfield in this tab — real one-time
+// generation cost that a same-page dive never pays (everything's already
+// warm). Rather than chase every source of that cost, hold the screen at
+// full black for DEEP_LINK_HOLD before the dive's motion starts at all, then
+// reveal over DEEP_LINK_REVEAL — whatever settling happens during the hold
+// is never on screen.
+export const DEEP_LINK_HOLD = 1.0; // s
+export const DEEP_LINK_REVEAL = 0.4; // s
+
 /** Per-base cinematic orbit parameters (world units, local scene at origin). */
 export interface OrbitSpec {
   radius: number;
