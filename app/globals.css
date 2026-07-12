@@ -737,6 +737,15 @@ body {
   flex: none;
   animation: la-pulse 1.8s ease-in-out infinite;
 }
+/* Temporary-access outcome reads as "granted", not a warning — signal-cyan
+   instead of the ember used for an actual lockdown state. */
+.la-boot .pending.temp {
+  color: var(--accent);
+}
+.la-boot .pending.temp .pip {
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent);
+}
 .la-boot-close {
   margin-top: 18px;
   width: 100%;

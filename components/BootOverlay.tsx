@@ -24,7 +24,7 @@ const BOOT_LINES = [
   "» locking on SINUS MEDII 0°00′N 0°00′E ... OK",
   "» opening berth manifest · 09 nodes ...... OK",
   "» credentials received · queued for review.",
-  "» clearance status ......... NOT AVAILABLE",
+  "» clearance status ......... TEMPORARY",
 ];
 
 export default function BootOverlay({
@@ -54,9 +54,9 @@ export default function BootOverlay({
       if (i < BOOT_LINES.length) {
         ids.push(setTimeout(next, 280 + Math.random() * 180));
       } else {
-        // Full clearance is denied, but the request itself is what unlocks
-        // the Array Map nav link — a consolation telemetry feed while
-        // clearance is pending.
+        // Full clearance is still under review, but the request itself
+        // grants temporary access — the Array Map (and every berth) unlocks
+        // right away while the real paperwork works through the queue.
         ids.push(
           setTimeout(() => {
             setProgress(100);
@@ -102,10 +102,10 @@ export default function BootOverlay({
                   <b>{l.replace(/ ?OK$/, "")}</b>
                   <span style={{ color: "#6ad8a8" }}> OK</span>
                 </>
-              ) : l.endsWith("NOT AVAILABLE") ? (
+              ) : l.endsWith("TEMPORARY") ? (
                 <>
-                  <b>{l.replace(/ ?NOT AVAILABLE$/, "")}</b>
-                  <span style={{ color: "var(--ember)" }}> NOT AVAILABLE</span>
+                  <b>{l.replace(/ ?TEMPORARY$/, "")}</b>
+                  <span style={{ color: "var(--accent)" }}> TEMPORARY</span>
                 </>
               ) : (
                 l
@@ -121,14 +121,14 @@ export default function BootOverlay({
           <span>{progress}%</span>
         </div>
         {progress === 100 && (
-          <div className="pending">
+          <div className="pending temp">
             <span className="pip" />
-            CLEARANCE NOT AVAILABLE · STATION IN LOCK DOWN
+            TEMPORARY ACCESS GRANTED · FULL CLEARANCE PENDING REVIEW
           </div>
         )}
         {progress === 100 && (
           <button className="la-boot-close" onClick={dismiss}>
-            Close · Stand By
+            Close · Enter Array
           </button>
         )}
       </div>
