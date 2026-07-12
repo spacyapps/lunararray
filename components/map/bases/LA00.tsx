@@ -410,13 +410,15 @@ function Silo({
 }
 
 /** Small vertical shaft, capped with a nose cone — an emergency launch tube,
- *  standing upright and shallow (unlike the deep horizontal silos), close
- *  enough to the surface disc to read as ready to breach it. Deliberately
- *  not wired into the tunnel web: these are meant to be separate, secret. */
+ *  shallow (unlike the deep horizontal silos) but still fully underground,
+ *  close enough to the surface disc to read as ready to breach it without
+ *  actually poking through. `position` is the nose tip — the shallowest
+ *  point — so it should sit at a small negative y (just under the surface
+ *  plane at y=0), with the shaft hanging further down from there. */
 function LaunchTube({
   position,
-  r = 0.16,
-  h = 0.85,
+  r = 0.11,
+  h = 0.45,
   color = ACCENT,
 }: {
   position: [number, number, number];
@@ -424,14 +426,11 @@ function LaunchTube({
   h?: number;
   color?: string;
 }) {
+  const coneH = r * 1.6;
   return (
     <group position={position}>
-      <mesh position={[0, h / 2, 0]}>
-        <cylinderGeometry args={[r, r, h, 10, 1, true]} />
-        <meshBasicMaterial color={color} wireframe transparent opacity={0.55} />
-      </mesh>
-      <mesh position={[0, h + r * 0.7, 0]}>
-        <coneGeometry args={[r * 1.15, r * 1.6, 10]} />
+      <mesh position={[0, -coneH / 2, 0]}>
+        <coneGeometry args={[r * 1.15, coneH, 10]} />
         <meshBasicMaterial
           color={color}
           transparent
@@ -440,7 +439,13 @@ function LaunchTube({
           depthWrite={false}
         />
       </mesh>
-      <mesh rotation={[-Math.PI / 2, 0, 0]}>
+      {/* shaft, hanging further down below the cone */}
+      <mesh position={[0, -coneH - h / 2, 0]}>
+        <cylinderGeometry args={[r, r, h, 10, 1, true]} />
+        <meshBasicMaterial color={color} wireframe transparent opacity={0.55} />
+      </mesh>
+      {/* collar ring at the cone/shaft junction */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -coneH, 0]}>
         <torusGeometry args={[r * 1.3, 0.02, 6, 24]} />
         <meshBasicMaterial
           color={color}
@@ -467,13 +472,14 @@ const H_SILO_B: [number, number, number] = [-4.6, -3.0, 0.6];
 const H_ROOM_NE: [number, number, number] = [3.2, -1.7, -3.4];
 const H_ROOM_S: [number, number, number] = [-1.4, -3.3, 3.6];
 const H_ROOM_DEEP: [number, number, number] = [1.2, -3.6, -0.6];
-// emergency launch tubes — shallow (well above everything else, which sits
-// below -1.4), standalone, no tunnel wired to them
+// emergency launch tubes — nose tips just under the surface plane (y=0),
+// well above everything else which sits below -1.4, standalone, no tunnel
+// wired to them
 const LAUNCH_TUBES: [number, number, number][] = [
-  [3.0, -0.55, -4.6],
-  [-3.6, -0.5, 3.3],
-  [5.3, -0.65, -0.8],
-  [-1.0, -0.45, 5.4],
+  [3.0, -0.12, -4.6],
+  [-3.6, -0.09, 3.3],
+  [5.3, -0.15, -0.8],
+  [-1.0, -0.07, 5.4],
 ];
 
 const MAIN_TUNNELS: [number, number, number][][] = [
