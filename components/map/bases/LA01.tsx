@@ -15,11 +15,15 @@ const ACCENT = "#ffb45c";
 const HULL = "#eef2f7";
 const WARM = "#ffd9a0";
 
+// The two S-curves cross in plan view right over the terminal — held at a
+// consistent ~3-unit vertical gap throughout (not just at the crossing) so
+// one ribbon reads as a clean overpass rather than the rails visually
+// clipping into each other where they meet.
 const RAIL_A: [number, number, number][] = [
-  [-95, 5, -30], [-55, 5, -18], [-20, 4.5, -2], [8, 4.5, 4], [40, 5, 2], [95, 6, -12],
+  [-95, 4, -30], [-55, 4, -18], [-20, 3.5, -2], [8, 3.5, 4], [40, 4, 2], [95, 5, -12],
 ];
 const RAIL_B: [number, number, number][] = [
-  [-95, 6, 28], [-50, 5.5, 20], [-12, 4.5, 8], [16, 4.5, -1], [50, 5, -8], [95, 5.5, -2],
+  [-95, 8, 28], [-50, 7.5, 20], [-12, 6.5, 8], [16, 6.5, -1], [50, 7, -8], [95, 7.5, -2],
 ];
 
 function railCurve(pts: [number, number, number][]) {
