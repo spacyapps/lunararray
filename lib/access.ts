@@ -2,12 +2,11 @@
 
 import { useSyncExternalStore } from "react";
 
-// Cosmetic access-gate for the Array Map nav link — not real auth, just the
-// "request access" lore paying off: once the boot sequence in BootOverlay
-// runs to completion, the map link on the landing page goes from locked
-// text to a real link. Persisted in localStorage so it stays unlocked
-// across reloads; the /map route itself is never blocked, only the nav
-// link's appearance.
+// Access-gate lore, not real auth: once the boot sequence in BootOverlay
+// runs to completion, this flips true — the landing page's nav link goes
+// from locked text to a real link, and MapRoot swaps its lock screen for
+// the actual map. Persisted in localStorage so it stays unlocked across
+// reloads.
 const KEY = "la-access-requested";
 const EVENT = "la-access-changed";
 

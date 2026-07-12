@@ -10,7 +10,20 @@
 // useAccessUnlocked() reads localStorage via useSyncExternalStore, so this
 // renders "locked" during SSR/hydration and flips live once the client
 // snapshot resolves — same one-frame flash the nav link already accepts.
+//
+// The reveal is deliberately NOT tied directly to the unlock flag: that flag
+// flips the instant the boot sequence finishes, which — if the map swapped
+// in right then — would unmount the lock screen (and the boot overlay still
+// showing "temporary access granted" on it) mid-display. Instead it's gated
+// on whether the user actually opened a live boot sequence on THIS screen:
+// if they never did (already unlocked from a prior visit), the map shows
+// immediately; if they did, the swap waits for them to dismiss the overlay.
+// (A "was already unlocked at mount" check built from useState/useEffect
+// timing was tried first and is unreliable — useSyncExternalStore's
+// SSR-mismatch correction can resolve to the real value after that state
+// already latched onto the stale server snapshot.)
 
+import { useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useAccessUnlocked } from "@/lib/access";
@@ -43,7 +56,13 @@ const mono: React.CSSProperties = {
   textTransform: "uppercase",
 };
 
-function LockedMap() {
+function LockedMap({
+  onRequestOpen,
+  onRequestDone,
+}: {
+  onRequestOpen: () => void;
+  onRequestDone: () => void;
+}) {
   return (
     <>
       <div style={{ position: "absolute", top: 28, left: 32 }}>
@@ -84,7 +103,7 @@ function LockedMap() {
       </div>
 
       <div style={{ position: "absolute", left: 32, bottom: 30 }}>
-        <RequestAccess />
+        <RequestAccess onOpen={onRequestOpen} onDone={onRequestDone} />
       </div>
     </>
   );
@@ -92,6 +111,14 @@ function LockedMap() {
 
 export default function MapRoot() {
   const unlocked = useAccessUnlocked();
+  const [booted, setBooted] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
+  // If a live boot sequence was never opened on this screen, `unlocked`
+  // alone decides (a returning visitor sees the map immediately). If one
+  // was opened, the swap waits until it's dismissed, so the "temporary
+  // access granted" message actually gets seen instead of being unmounted
+  // out from under itself the instant the unlock flag flips.
+  const showMap = unlocked && (!booted || dismissed);
   return (
     <div
       style={{
@@ -101,7 +128,11 @@ export default function MapRoot() {
         overflow: "hidden",
       }}
     >
-      {unlocked ? <MapScene /> : <LockedMap />}
+      {showMap ? (
+        <MapScene />
+      ) : (
+        <LockedMap onRequestOpen={() => setBooted(true)} onRequestDone={() => setDismissed(true)} />
+      )}
     </div>
   );
 }
