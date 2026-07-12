@@ -30,6 +30,20 @@ const TOWERS: { x: number; z: number; h: number; r: number }[] = [
   { x: -20, z: 7, h: 8, r: 1.8 },
 ];
 
+// Smaller greenhouse domes on a clean ring beyond the towers (max tower
+// radius ~21) and both walkway rings (r=13/18) — a real circle around the
+// spires, echoing the central park dome at a smaller scale, not clustered
+// at the core.
+const OUTER_DOME_COUNT = 8;
+const OUTER_DOME_RADIUS = 26;
+const OUTER_DOMES: { x: number; z: number; r: number }[] = Array.from(
+  { length: OUTER_DOME_COUNT },
+  (_, i) => {
+    const a = (i / OUTER_DOME_COUNT) * Math.PI * 2 + 0.3;
+    return { x: Math.cos(a) * OUTER_DOME_RADIUS, z: Math.sin(a) * OUTER_DOME_RADIUS, r: 2.1 + seedRand(i * 11 + 5) * 1.4 };
+  },
+);
+
 function Trams({ radius, y, period, count }: { radius: number; y: number; period: number; count: number }) {
   const group = useRef<THREE.Group>(null);
   useFrame(({ clock }) => {
@@ -64,6 +78,14 @@ export default function LA08() {
       {/* the park dome — green glass heart */}
       <LensDome r={9.5} squash={0.5} color="#d2f5da" opacity={0.45} emissive={PARK} />
       <WindowBand radius={9.7} position={[0, 0.5, 0]} color={WARM} thickness={0.1} />
+
+      {/* smaller greenhouse domes ringing the outer edge */}
+      {OUTER_DOMES.map((d, i) => (
+        <group key={i} position={[d.x, 0, d.z]}>
+          <LensDome r={d.r} squash={0.5} color="#d2f5da" opacity={0.4} emissive={PARK} />
+          <WindowBand radius={d.r * 1.03} position={[0, 0.3, 0]} color={WARM} thickness={0.05} />
+        </group>
+      ))}
 
       {/* tower ring */}
       {TOWERS.map((t, i) => (
