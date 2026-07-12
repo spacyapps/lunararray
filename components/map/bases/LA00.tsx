@@ -349,12 +349,74 @@ function Chamber({
   );
 }
 
-/** Large cylindrical underground building — additive volume with bright
- *  edge rings top and bottom, so it reads as a structure, not a room. */
+/** Large cylindrical underground building, lying on its side — a pressure
+ *  vessel oriented to shed load from above rather than stand under it,
+ *  unlike a vertical shaft. `rotationY` points its long axis at any compass
+ *  heading (applied after laying it down, so it actually steers the axis
+ *  instead of spinning an already-symmetric vertical cylinder in place). */
 function Silo({
   position,
   r = 0.9,
   h = 1.8,
+  color = ACCENT,
+  rotationY = 0,
+}: {
+  position: [number, number, number];
+  r?: number;
+  h?: number;
+  color?: string;
+  rotationY?: number;
+}) {
+  return (
+    <group position={position} rotation={[0, rotationY, 0]}>
+      <group rotation={[0, 0, Math.PI / 2]}>
+        <mesh>
+          <cylinderGeometry args={[r, r, h, 20, 1, true]} />
+          <meshBasicMaterial
+            color={color}
+            transparent
+            opacity={0.14}
+            blending={THREE.AdditiveBlending}
+            depthWrite={false}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+        <mesh>
+          <cylinderGeometry args={[r, r, h, 12, 1, true]} />
+          <meshBasicMaterial
+            color={color}
+            wireframe
+            transparent
+            opacity={0.28}
+            blending={THREE.AdditiveBlending}
+            depthWrite={false}
+          />
+        </mesh>
+        {[h / 2, -h / 2].map((y, i) => (
+          <mesh key={i} rotation={[-Math.PI / 2, 0, 0]} position={[0, y, 0]}>
+            <torusGeometry args={[r, 0.035, 6, 40]} />
+            <meshBasicMaterial
+              color={color}
+              transparent
+              opacity={0.7}
+              blending={THREE.AdditiveBlending}
+              depthWrite={false}
+            />
+          </mesh>
+        ))}
+      </group>
+    </group>
+  );
+}
+
+/** Small vertical shaft, capped with a nose cone — an emergency launch tube,
+ *  standing upright and shallow (unlike the deep horizontal silos), close
+ *  enough to the surface disc to read as ready to breach it. Deliberately
+ *  not wired into the tunnel web: these are meant to be separate, secret. */
+function LaunchTube({
+  position,
+  r = 0.16,
+  h = 0.85,
   color = ACCENT,
 }: {
   position: [number, number, number];
@@ -364,40 +426,30 @@ function Silo({
 }) {
   return (
     <group position={position}>
-      <mesh>
-        <cylinderGeometry args={[r, r, h, 20, 1, true]} />
-        <meshBasicMaterial
-          color={color}
-          transparent
-          opacity={0.14}
-          blending={THREE.AdditiveBlending}
-          depthWrite={false}
-          side={THREE.DoubleSide}
-        />
+      <mesh position={[0, h / 2, 0]}>
+        <cylinderGeometry args={[r, r, h, 10, 1, true]} />
+        <meshBasicMaterial color={color} wireframe transparent opacity={0.55} />
       </mesh>
-      <mesh>
-        <cylinderGeometry args={[r, r, h, 12, 1, true]} />
+      <mesh position={[0, h + r * 0.7, 0]}>
+        <coneGeometry args={[r * 1.15, r * 1.6, 10]} />
         <meshBasicMaterial
           color={color}
-          wireframe
           transparent
-          opacity={0.28}
+          opacity={0.85}
           blending={THREE.AdditiveBlending}
           depthWrite={false}
         />
       </mesh>
-      {[h / 2, -h / 2].map((y, i) => (
-        <mesh key={i} rotation={[-Math.PI / 2, 0, 0]} position={[0, y, 0]}>
-          <torusGeometry args={[r, 0.035, 6, 40]} />
-          <meshBasicMaterial
-            color={color}
-            transparent
-            opacity={0.7}
-            blending={THREE.AdditiveBlending}
-            depthWrite={false}
-          />
-        </mesh>
-      ))}
+      <mesh rotation={[-Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[r * 1.3, 0.02, 6, 24]} />
+        <meshBasicMaterial
+          color={color}
+          transparent
+          opacity={0.6}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+        />
+      </mesh>
     </group>
   );
 }
@@ -415,6 +467,14 @@ const H_SILO_B: [number, number, number] = [-4.6, -3.0, 0.6];
 const H_ROOM_NE: [number, number, number] = [3.2, -1.7, -3.4];
 const H_ROOM_S: [number, number, number] = [-1.4, -3.3, 3.6];
 const H_ROOM_DEEP: [number, number, number] = [1.2, -3.6, -0.6];
+// emergency launch tubes — shallow (well above everything else, which sits
+// below -1.4), standalone, no tunnel wired to them
+const LAUNCH_TUBES: [number, number, number][] = [
+  [3.0, -0.55, -4.6],
+  [-3.6, -0.5, 3.3],
+  [5.3, -0.65, -0.8],
+  [-1.0, -0.45, 5.4],
+];
 
 const MAIN_TUNNELS: [number, number, number][][] = [
   [H_HUB, [-0.4, -2.5, -1.0], H_VAULT],
@@ -575,13 +635,18 @@ function TunnelHologram() {
           <Chamber position={H_VAULT} size={0.5} color={WARM} box />
           <Chamber position={H_ARCHIVE} size={0.45} />
           <Chamber position={H_COMMS} size={0.4} box />
-          {/* underground buildings */}
-          <Silo position={H_SILO_A} r={0.85} h={1.7} />
-          <Silo position={H_SILO_B} r={1.05} h={2.0} color={WARM} />
+          {/* underground buildings — lying on their side, shedding load from
+              above rather than standing under it */}
+          <Silo position={H_SILO_A} r={0.85} h={1.7} rotationY={-0.97} />
+          <Silo position={H_SILO_B} r={1.05} h={2.0} color={WARM} rotationY={-2.68} />
           {/* hidden rooms, deeper */}
           <Chamber position={H_ROOM_NE} size={0.3} />
           <Chamber position={H_ROOM_S} size={0.32} box />
           <Chamber position={H_ROOM_DEEP} size={0.34} color={WARM} />
+          {/* emergency launch tubes — shallow, vertical, unconnected */}
+          {LAUNCH_TUBES.map((pos, i) => (
+            <LaunchTube key={i} position={pos} />
+          ))}
           {MAIN_TUNNELS.map((pts, i) => (
             <HoloTube key={i} pts={pts} />
           ))}
