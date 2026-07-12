@@ -488,7 +488,7 @@ export function VaultDome({
 // to tile seamlessly along v. The component sets texture.repeat.y from the
 // curve's real arc length, so a short connector and a rail spanning the
 // whole map both read as built from similarly-spaced pipe segments.
-function buildTubeTexture(): HTMLCanvasElement {
+export function buildTubeTexture(): HTMLCanvasElement {
   const w = 256;
   const h = 256;
   const cv = document.createElement("canvas");

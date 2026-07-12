@@ -5,11 +5,11 @@
 // against the rim, and swept conveyor tubes arcing ore down to teardrop
 // hoppers and a lens-domed refinery. Hot amber light, house style.
 
-import { useRef } from "react";
+import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import BaseEnvironment from "./BaseEnvironment";
-import { Beacon, LensDome, SweepTube, Teardrop, seedRand } from "./parts";
+import { Beacon, LensDome, SweepTube, Teardrop, buildTubeTexture, seedRand } from "./parts";
 
 const ACCENT = "#ffd75c";
 const ORE = "#ffb02e";
@@ -67,12 +67,34 @@ function CutterWheel() {
   useFrame(({ clock }) => {
     if (wheel.current) wheel.current.rotation.z = clock.getElapsedTime() * 0.18;
   });
+  // The same grey paneling texture SweepTube uses for pipes/rails — the
+  // wheel rim and boom are both plain UV-cylindrical surfaces, so it tiles
+  // onto them just as well and reads as detailed hardware instead of flat
+  // toon-shaded color.
+  const wheelTex = useMemo(() => {
+    const tex = new THREE.CanvasTexture(buildTubeTexture());
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(10, 3);
+    tex.anisotropy = 4;
+    return tex;
+  }, []);
+  const boomTex = useMemo(() => {
+    const tex = new THREE.CanvasTexture(buildTubeTexture());
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(1, 3);
+    tex.anisotropy = 4;
+    return tex;
+  }, []);
   return (
     <group position={[14.5, 5.8, 9]} rotation={[0.2, -0.6, 0.12]}>
       <group ref={wheel}>
         <mesh>
           <torusGeometry args={[4.6, 1, 12, 36]} />
-          <meshToonMaterial color="#c8ccd8" />
+          <meshToonMaterial color="#c8ccd8" map={wheelTex} bumpMap={wheelTex} bumpScale={0.03} />
         </mesh>
         {Array.from({ length: 12 }).map((_, i) => {
           const a = (i / 12) * Math.PI * 2;
@@ -91,7 +113,7 @@ function CutterWheel() {
       {/* boom arm down to the ground */}
       <mesh position={[3.5, -3.4, 1.5]} rotation={[0.1, 0, 0.9]} scale={[1.4, 9, 1.4]}>
         <cylinderGeometry args={[0.35, 0.5, 1, 10]} />
-        <meshToonMaterial color="#9aa0b4" />
+        <meshToonMaterial color="#9aa0b4" map={boomTex} bumpMap={boomTex} bumpScale={0.03} />
       </mesh>
     </group>
   );
