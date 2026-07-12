@@ -6,6 +6,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import Moon from "./Moon";
@@ -23,7 +24,16 @@ const mono: React.CSSProperties = {
 };
 
 export default function MapScene() {
-  const [view, setView] = useState<View>({ mode: "map" });
+  // Deep link from the landing page's embedded preview: /map?station=LA-03
+  // jumps straight into that base's dive-in on load instead of the map view.
+  const searchParams = useSearchParams();
+  const [view, setView] = useState<View>(() => {
+    const requested = searchParams.get("station");
+    if (requested && STATIONS.some((s) => s.id === requested)) {
+      return { mode: "dive", id: requested };
+    }
+    return { mode: "map" };
+  });
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const fadeRef = useRef<HTMLDivElement>(null);
 

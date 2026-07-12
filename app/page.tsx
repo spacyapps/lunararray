@@ -6,6 +6,7 @@
 // split into Client Components.
 
 import Background from "@/components/Background";
+import EmbeddedGlobe from "@/components/EmbeddedGlobe";
 import GlobeOctogram from "@/components/GlobeOctogram";
 import RequestAccess from "@/components/RequestAccess";
 import Statusbar from "@/components/Statusbar";
@@ -26,9 +27,12 @@ export default function Home() {
       <div className="la-corner bl" />
       <div className="la-corner br" />
 
-      {/* Centerpiece moon globe */}
+      {/* Centerpiece — the real 3D map, smaller than the old 720px SVG globe
+          and pulled back a touch so it doesn't dominate the frame. Locked
+          (non-interactive) until Request Access completes; a hotspot click
+          deep-links into the full /map experience. */}
       <div className="octo-stage">
-        <GlobeOctogram size={720} mode="globe" />
+        <EmbeddedGlobe size={620} />
       </div>
 
       {/* Top-left — title */}
