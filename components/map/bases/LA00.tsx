@@ -8,10 +8,11 @@
 //
 // Buried lore: a service hatch south-west of the terminal opens a keypad;
 // the access code is today's date as MMDD (e.g. 0711 for July 11), checked
-// against the visitor's local clock at submit time. A correct code projects
-// a holographic map of the subsurface tunnel network — a hub under the
-// terminal, three facility chambers, and three corridors that run past the
-// hologram's edge and cut off. Where they go, the map doesn't know.
+// against the visitor's local clock at submit time — and the UI gives no
+// hint, deliberately. Visitors have to guess. A correct code projects a
+// holographic map of the subsurface: a hub under the terminal, facility
+// chambers, two large cylinder buildings, and three corridors that run past
+// the hologram's edge and cut off, gated behind "Level 5 access".
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
@@ -229,7 +230,7 @@ function Keypad({ onUnlock, onClose }: { onUnlock: () => void; onClose: () => vo
                 color: digits[i] ? "#eef2f7" : "rgba(238, 242, 247, 0.22)",
               }}
             >
-              {digits[i] ?? "MMDD"[i]}
+              {digits[i] ?? "·"}
             </div>
           ))}
         </div>
@@ -248,7 +249,7 @@ function Keypad({ onUnlock, onClose }: { onUnlock: () => void; onClose: () => vo
                   : "rgba(238, 242, 247, 0.35)",
           }}
         >
-          {status === "denied" ? "Access denied" : status === "granted" ? "Access granted" : "Enter date code"}
+          {status === "denied" ? "Access denied" : status === "granted" ? "Access granted" : "Enter code"}
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6, marginTop: 8 }}>
           {["1", "2", "3", "4", "5", "6", "7", "8", "9", "C", "0", "⌫"].map((k) => (
@@ -348,17 +349,82 @@ function Chamber({
   );
 }
 
+/** Large cylindrical underground building — additive volume with bright
+ *  edge rings top and bottom, so it reads as a structure, not a room. */
+function Silo({
+  position,
+  r = 0.9,
+  h = 1.8,
+  color = ACCENT,
+}: {
+  position: [number, number, number];
+  r?: number;
+  h?: number;
+  color?: string;
+}) {
+  return (
+    <group position={position}>
+      <mesh>
+        <cylinderGeometry args={[r, r, h, 20, 1, true]} />
+        <meshBasicMaterial
+          color={color}
+          transparent
+          opacity={0.14}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+      <mesh>
+        <cylinderGeometry args={[r, r, h, 12, 1, true]} />
+        <meshBasicMaterial
+          color={color}
+          wireframe
+          transparent
+          opacity={0.28}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+        />
+      </mesh>
+      {[h / 2, -h / 2].map((y, i) => (
+        <mesh key={i} rotation={[-Math.PI / 2, 0, 0]} position={[0, y, 0]}>
+          <torusGeometry args={[r, 0.035, 6, 40]} />
+          <meshBasicMaterial
+            color={color}
+            transparent
+            opacity={0.7}
+            blending={THREE.AdditiveBlending}
+            depthWrite={false}
+          />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
 // Hologram-local layout. The disc (r=7) is a plan view of the surface at
 // ~0.18 scale, centered on the hatch; tunnels hang beneath it like roots.
 const H_HUB: [number, number, number] = [1.8, -2.2, -1.44];
 const H_VAULT: [number, number, number] = [-2.5, -2.7, -0.5];
 const H_ARCHIVE: [number, number, number] = [0.5, -1.9, 2.8];
 const H_COMMS: [number, number, number] = [-1.62, -1.5, -2.88];
+// large cylinder buildings — whole underground structures, not just rooms
+const H_SILO_A: [number, number, number] = [4.6, -2.4, 2.2];
+const H_SILO_B: [number, number, number] = [-4.6, -3.0, 0.6];
+// deeper hidden rooms off the main runs
+const H_ROOM_NE: [number, number, number] = [3.2, -1.7, -3.4];
+const H_ROOM_S: [number, number, number] = [-1.4, -3.3, 3.6];
+const H_ROOM_DEEP: [number, number, number] = [1.2, -3.6, -0.6];
 
 const MAIN_TUNNELS: [number, number, number][][] = [
   [H_HUB, [-0.4, -2.5, -1.0], H_VAULT],
   [H_HUB, [1.2, -2.1, 0.8], H_ARCHIVE],
   [H_HUB, [0.2, -1.9, -2.3], H_COMMS],
+  [H_HUB, [3.3, -2.4, 0.3], H_SILO_A],
+  [H_VAULT, [-3.6, -2.9, 0.1], H_SILO_B],
+  [H_HUB, [2.6, -1.9, -2.5], H_ROOM_NE],
+  [H_ARCHIVE, [-0.4, -2.7, 3.3], H_ROOM_S],
+  [H_HUB, [1.5, -3.0, -1.1], H_ROOM_DEEP],
 ];
 
 // Surface ghosts drawn flat on the disc for orientation: terminal lens +
@@ -509,6 +575,13 @@ function TunnelHologram() {
           <Chamber position={H_VAULT} size={0.5} color={WARM} box />
           <Chamber position={H_ARCHIVE} size={0.45} />
           <Chamber position={H_COMMS} size={0.4} box />
+          {/* underground buildings */}
+          <Silo position={H_SILO_A} r={0.85} h={1.7} />
+          <Silo position={H_SILO_B} r={1.05} h={2.0} color={WARM} />
+          {/* hidden rooms, deeper */}
+          <Chamber position={H_ROOM_NE} size={0.3} />
+          <Chamber position={H_ROOM_S} size={0.32} box />
+          <Chamber position={H_ROOM_DEEP} size={0.34} color={WARM} />
           {MAIN_TUNNELS.map((pts, i) => (
             <HoloTube key={i} pts={pts} />
           ))}
@@ -537,7 +610,7 @@ function TunnelHologram() {
                       whiteSpace: "nowrap",
                     }}
                   >
-                    Uncharted
+                    Level 5 access
                   </div>
                 </Html>
               )}
