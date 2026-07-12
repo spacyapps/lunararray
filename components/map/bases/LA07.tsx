@@ -10,8 +10,8 @@ import BaseEnvironment from "./BaseEnvironment";
 import { Beacon, Teardrop, WindowBand, seedRand, teardropRadiusAt } from "./parts";
 
 const ACCENT = "#ff8a5c";
-const HULL = "#eef2f7";
 const WARM = "#ffd9a0";
+const GREEN = "#2ea86a";
 
 // Finished towers (west side)
 const BUILT: { x: number; z: number; h: number; r: number }[] = [
@@ -40,13 +40,13 @@ export default function LA07() {
 
       <BaseEnvironment groundColor="#7a7484" rockTint="#686270" seed={7} />
 
-      {/* the lived-in quarter */}
+      {/* the lived-in quarter — real scattered windows, not wrap-around
+          rings: a cone with glowing rings and a ball on top reads as a
+          Christmas tree the second you make it green, no matter how nice
+          the fluting texture is. */}
       {BUILT.map((t, i) => (
         <group key={i} position={[t.x, 0, t.z]} rotation={[0, 0, (seedRand(i * 9 + 1) - 0.5) * 0.08]}>
-          <Teardrop height={t.h} radius={t.r} color={HULL} imageMap="/textures/spire-green2.jpg" />
-          <WindowBand radius={teardropRadiusAt(t.h, t.r, t.h * 0.32)} position={[0, t.h * 0.32, 0]} color={WARM} thickness={0.07} />
-          <WindowBand radius={teardropRadiusAt(t.h, t.r, t.h * 0.55)} position={[0, t.h * 0.55, 0]} color={WARM} thickness={0.06} />
-          {i === 0 && <WindowBand radius={teardropRadiusAt(t.h, t.r, t.h * 0.74)} position={[0, t.h * 0.74, 0]} color={ACCENT} thickness={0.05} />}
+          <Teardrop height={t.h} radius={t.r} color={GREEN} variant="residential" seed={i * 41} />
           {i < 2 && <Beacon color={ACCENT} size={0.16} speed={2 + i} position={[0, t.h + 0.4, 0]} />}
         </group>
       ))}
