@@ -15,7 +15,7 @@ import Hotspots from "./Hotspots";
 import Starfield3D from "./Starfield3D";
 import CameraDirector from "./CameraDirector";
 import BaseScene from "./bases/BaseScene";
-import { View } from "./view";
+import { View, EMBED_CAM_POS, EMBED_FOV, MAP_CAM_POS, MAP_FOV } from "./view";
 import { STATIONS } from "@/lib/stations";
 
 const mono: React.CSSProperties = {
@@ -27,13 +27,11 @@ export default function MapScene() {
   // Deep link from the landing page's embedded preview: /map?station=LA-03
   // jumps straight into that base's dive-in on load instead of the map view.
   const searchParams = useSearchParams();
-  const [view, setView] = useState<View>(() => {
-    const requested = searchParams.get("station");
-    if (requested && STATIONS.some((s) => s.id === requested)) {
-      return { mode: "dive", id: requested };
-    }
-    return { mode: "map" };
-  });
+  const requestedStation = searchParams.get("station");
+  const isDeepLink = !!requestedStation && STATIONS.some((s) => s.id === requestedStation);
+  const [view, setView] = useState<View>(() =>
+    isDeepLink ? { mode: "dive", id: requestedStation! } : { mode: "map" },
+  );
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const fadeRef = useRef<HTMLDivElement>(null);
 
@@ -62,7 +60,11 @@ export default function MapScene() {
   return (
     <>
       <Canvas
-        camera={{ position: [0, 0.9, 6.4], fov: 42 }}
+        // Deep-linked from the landing page's embedded preview: start at that
+        // preview's camera pose instead of the full-map default, so the page
+        // transition reads as one continuous zoom (CameraDirector eases both
+        // position and fov back to the standard map framing over the dive).
+        camera={{ position: isDeepLink ? EMBED_CAM_POS : MAP_CAM_POS, fov: isDeepLink ? EMBED_FOV : MAP_FOV }}
         gl={{ antialias: true }}
         style={{ position: "absolute", inset: 0 }}
       >

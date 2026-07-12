@@ -20,6 +20,7 @@ import Hotspots from "./map/Hotspots";
 import Starfield3D from "./map/Starfield3D";
 import { STATIONS } from "@/lib/stations";
 import { useAccessUnlocked } from "@/lib/access";
+import { EMBED_CAM_POS, EMBED_FOV } from "./map/view";
 
 const mono: React.CSSProperties = {
   fontFamily: "var(--mono)",
@@ -38,7 +39,7 @@ export default function EmbeddedGlobeScene() {
           sets pointer-events explicitly, breaking inheritance from the
           wrapper above — so the lock has to be set here too, directly. */}
       <Canvas
-        camera={{ position: [0, 0.9, 8.4], fov: 38 }}
+        camera={{ position: EMBED_CAM_POS, fov: EMBED_FOV }}
         gl={{ antialias: true }}
         style={{ position: "absolute", inset: 0, pointerEvents: unlocked ? "auto" : "none" }}
       >

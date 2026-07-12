@@ -14,14 +14,24 @@ import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { STATIONS, latLonToVec3, mapLatLon } from "@/lib/stations";
 import { MOON_RADIUS } from "./Moon";
-import { View, DIVE_DUR, RISE_DUR, easeInOut, DEFAULT_ORBIT, OrbitSpec } from "./view";
+import { View, DIVE_DUR, RISE_DUR, easeInOut, DEFAULT_ORBIT, OrbitSpec, MAP_CAM_POS, MAP_FOV } from "./view";
 import { ORBITS } from "./bases/orbits";
 
-const MAP_CAM = new THREE.Vector3(0, 0.9, 6.4);
+const MAP_CAM = new THREE.Vector3(...MAP_CAM_POS);
 // Extra beat at full black after the dive animation completes, before
 // handing off to "base" mode — cheap insurance against any one-frame
 // discontinuity (camera snap, React re-render timing) landing visibly.
 const ARRIVAL_HOLD = 0.15;
+
+/** Isolated from CameraDirector's render scope so the compiler's hook-value
+ *  immutability check doesn't see this as a direct write to the `camera`
+ *  returned by useThree — same underlying mutation as the position/lookAt
+ *  calls already used throughout, just on a property three.js has no
+ *  dedicated setter method for. */
+function applyFov(cam: THREE.PerspectiveCamera, fov: number) {
+  cam.fov = fov;
+  cam.updateProjectionMatrix();
+}
 
 function stationWorld(id: string): THREE.Vector3 {
   const s = STATIONS.find((st) => st.id === id)!;
@@ -54,6 +64,7 @@ export default function CameraDirector({
     t0: number;
     fromPos: THREE.Vector3;
     fromFocus: THREE.Vector3;
+    fromFov: number;
     fired?: boolean;
     holdStart?: number;
   } | null>(null);
@@ -75,12 +86,19 @@ export default function CameraDirector({
 
     if (view.mode === "dive") {
       const key = `dive-${view.id}`;
+      const pCam = camera as THREE.PerspectiveCamera;
       if (anim.current?.key !== key) {
         anim.current = {
           key,
           t0: now,
           fromPos: camera.position.clone(),
           fromFocus: new THREE.Vector3(0, 0, 0),
+          // A deep link from the landing page starts the Canvas at the
+          // embedded preview's (narrower) fov instead of the map's own —
+          // ease it back to the standard map fov over the dive so a normal
+          // in-page dive (already at MAP_FOV) is a no-op, and a deep-linked
+          // one lands at the same framing base/rise/map always use.
+          fromFov: pCam.fov,
         };
       }
       const a = anim.current;
@@ -91,6 +109,9 @@ export default function CameraDirector({
       camera.position.lerpVectors(a.fromPos, target, e);
       focus.current.lerpVectors(a.fromFocus, st, Math.min(1, e * 1.4));
       camera.lookAt(focus.current);
+      if (a.fromFov !== MAP_FOV) {
+        applyFov(pCam, THREE.MathUtils.lerp(a.fromFov, MAP_FOV, e));
+      }
       // fade to black over the last stretch of the dive
       setFade((t - 0.72) / 0.28);
       if (t >= 1) {
@@ -132,6 +153,7 @@ export default function CameraDirector({
           t0: now,
           fromPos: divePoint(view.id),
           fromFocus: stationWorld(view.id),
+          fromFov: MAP_FOV,
         };
         // camera snaps back above the station behind a fade already at black
         setFade(1);
