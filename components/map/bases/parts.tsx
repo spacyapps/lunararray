@@ -423,6 +423,65 @@ export function LensDome({
   );
 }
 
+/** Long glass barrel vault — rectangular footprint, rounded roof. Unlike
+ *  LensDome (a stretched sphere, always reads as round/oval), this is a
+ *  genuine straight-sided run: a half-cylinder roof capped with half-disc
+ *  ends, length along local +X. Sits on the ground, peak height == r. */
+export function VaultDome({
+  length = 20,
+  r = 6,
+  color = "#aef0ff",
+  opacity = 0.85,
+  emissive,
+  ...props
+}: {
+  length?: number;
+  r?: number;
+  color?: string;
+  opacity?: number;
+  emissive?: string;
+} & ThreeElements["group"]) {
+  const bump = useMemo(() => {
+    const tex = new THREE.CanvasTexture(buildDomeBump());
+    tex.anisotropy = 4;
+    return tex;
+  }, []);
+  const matProps = {
+    color,
+    transparent: true,
+    opacity,
+    roughness: 0.15,
+    metalness: 0.1,
+    bumpMap: bump,
+    bumpScale: 0.025,
+    emissive: emissive ?? "#000000",
+    emissiveIntensity: emissive ? 0.5 : 0,
+    side: THREE.DoubleSide,
+  } as const;
+  return (
+    <group {...props}>
+      {/* roof: half-cylinder, rotated -90deg about Z so its length axis lies
+          along local X. That rotation maps a cylinder point at theta to
+          world (y, -x, z) — theta=270deg (x=-r,z=0) is the only point that
+          lands at +Y (the peak), so the visible sweep has to be centered
+          there: thetaStart=180deg, thetaLength=180deg. */}
+      <mesh rotation={[0, 0, -Math.PI / 2]}>
+        <cylinderGeometry args={[r, r, length, 40, 1, true, Math.PI, Math.PI]} />
+        <meshStandardMaterial {...matProps} />
+      </mesh>
+      {/* half-disc end caps closing the tunnel */}
+      <mesh position={[length / 2, 0, 0]} rotation={[0, Math.PI / 2, 0]}>
+        <circleGeometry args={[r, 40, 0, Math.PI]} />
+        <meshStandardMaterial {...matProps} />
+      </mesh>
+      <mesh position={[-length / 2, 0, 0]} rotation={[0, -Math.PI / 2, 0]}>
+        <circleGeometry args={[r, 40, 0, Math.PI]} />
+        <meshStandardMaterial {...matProps} />
+      </mesh>
+    </group>
+  );
+}
+
 // One repeat-tile of pipe detail — a couple of longitudinal seams (baked
 // directly, since TubeGeometry's UV.u already wraps 0-1 around the
 // circumference with no repeat needed) plus a single ring seam positioned

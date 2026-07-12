@@ -7,7 +7,7 @@
 // finished side; the frontier reads by rim light alone.
 
 import BaseEnvironment from "./BaseEnvironment";
-import { Beacon, Teardrop, WindowBand, seedRand, teardropRadiusAt } from "./parts";
+import { Beacon, Teardrop, VaultDome, WindowBand, seedRand, teardropRadiusAt } from "./parts";
 
 const ACCENT = "#ff8a5c";
 const WARM = "#ffd9a0";
@@ -39,6 +39,13 @@ export default function LA07() {
       <pointLight position={[-14, 8, 0]} intensity={55} color={WARM} distance={28} />
 
       <BaseEnvironment groundColor="#7a7484" rockTint="#686270" seed={7} />
+
+      {/* boundary greenhouse — a long vaulted run standing well clear of the
+          towers (max z is 6.5) and the growth-ring roads, out past the
+          zone's outer (north) edge, marking the pressurized perimeter the
+          frontier line is expanding away from — its own separate structure,
+          not touching anything else in the scene. */}
+      <VaultDome length={42} r={6} color="#dce8f0" opacity={0.4} emissive={ACCENT} position={[0, 0, 20]} />
 
       {/* the lived-in quarter — real scattered windows, not wrap-around
           rings: a cone with glowing rings and a ball on top reads as a
