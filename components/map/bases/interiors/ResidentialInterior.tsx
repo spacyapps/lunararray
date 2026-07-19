@@ -155,7 +155,18 @@ function DigitalPanel({
   );
 }
 
-/** Real 3D lounge pieces skinned with fabric + wood maps. */
+/** Soft fabric material helper. */
+function fabricMat(map: THREE.Texture, color: string) {
+  return (
+    <meshStandardMaterial map={map} color={color} roughness={0.92} metalness={0.02} />
+  );
+}
+
+/**
+ * Rounded lounge facing the lunar window (−Z wall).
+ * Built in world space: seat faces −Z, back toward +Z (door), table between
+ * sofa and window. Capsules / spheres only — no boxy cushions.
+ */
 function LoungeSet({
   fabric,
   wood,
@@ -167,61 +178,105 @@ function LoungeSet({
 }) {
   return (
     <group position={position}>
-      {/* sofa base */}
-      <mesh position={[0, 0.28, 0.1]} castShadow receiveShadow>
-        <boxGeometry args={[2.7, 0.42, 1.05]} />
-        <meshStandardMaterial map={fabric} color="#f0ebe4" roughness={0.88} />
+      {/* —— Sofa: back of room, looking toward window (−Z) —— */}
+      {/* plinth / base (soft cylinder slab) */}
+      <mesh position={[0, 0.12, 0.15]} castShadow receiveShadow>
+        <cylinderGeometry args={[0.55, 0.62, 0.18, 28]} />
+        <meshStandardMaterial map={wood} color="#8a7a68" roughness={0.55} />
       </mesh>
-      {/* sofa back */}
-      <mesh position={[0, 0.62, -0.38]} castShadow>
-        <boxGeometry args={[2.7, 0.72, 0.28]} />
-        <meshStandardMaterial map={fabric} color="#ebe6df" roughness={0.88} />
+      {/* seat — long horizontal capsule along X, slightly toward door so face −Z */}
+      <mesh position={[0, 0.36, 0.2]} rotation={[0, 0, Math.PI / 2]} castShadow receiveShadow>
+        <capsuleGeometry args={[0.38, 1.85, 10, 20]} />
+        {fabricMat(fabric, "#f2eee8")}
       </mesh>
-      {/* arms */}
-      <mesh position={[-1.25, 0.48, 0.05]} castShadow>
-        <boxGeometry args={[0.22, 0.5, 0.95]} />
-        <meshStandardMaterial map={fabric} color="#e8e2da" roughness={0.88} />
+      {/* seat depth bolster (second capsule slightly toward window) */}
+      <mesh position={[0, 0.34, -0.05]} rotation={[0, 0, Math.PI / 2]} castShadow>
+        <capsuleGeometry args={[0.3, 1.7, 10, 18]} />
+        {fabricMat(fabric, "#efeae3")}
       </mesh>
-      <mesh position={[1.25, 0.48, 0.05]} castShadow>
-        <boxGeometry args={[0.22, 0.5, 0.95]} />
-        <meshStandardMaterial map={fabric} color="#e8e2da" roughness={0.88} />
+      {/* backrest — upright-ish capsule along X, at +Z edge of seat */}
+      <mesh position={[0, 0.68, 0.48]} rotation={[0.35, 0, Math.PI / 2]} castShadow>
+        <capsuleGeometry args={[0.26, 1.75, 10, 18]} />
+        {fabricMat(fabric, "#ebe6df")}
       </mesh>
-      {/* cushions — slightly offset for life */}
-      <mesh position={[-0.55, 0.55, 0.15]} rotation={[0.12, 0.15, 0]} castShadow>
-        <boxGeometry args={[0.85, 0.18, 0.55]} />
-        <meshStandardMaterial map={fabric} color="#f5f0ea" roughness={0.9} />
+      {/* rounded arms (vertical-ish capsules along Z) */}
+      <mesh position={[-1.15, 0.48, 0.12]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+        <capsuleGeometry args={[0.15, 0.62, 8, 14]} />
+        {fabricMat(fabric, "#e8e2da")}
       </mesh>
-      <mesh position={[0.5, 0.55, 0.12]} rotation={[0.1, -0.12, 0]} castShadow>
-        <boxGeometry args={[0.85, 0.18, 0.55]} />
-        <meshStandardMaterial map={fabric} color="#f2ede7" roughness={0.9} />
+      <mesh position={[1.15, 0.48, 0.12]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+        <capsuleGeometry args={[0.15, 0.62, 8, 14]} />
+        {fabricMat(fabric, "#e8e2da")}
       </mesh>
-      {/* coffee table */}
-      <mesh position={[0, 0.32, 1.35]} castShadow receiveShadow>
-        <boxGeometry args={[1.4, 0.07, 0.75]} />
-        <meshStandardMaterial map={wood} color="#d4b896" roughness={0.45} metalness={0.08} />
+      {/* arm caps */}
+      <mesh position={[-1.15, 0.58, -0.22]} castShadow>
+        <sphereGeometry args={[0.16, 16, 12]} />
+        {fabricMat(fabric, "#e8e2da")}
       </mesh>
-      {(
-        [
-          [-0.5, 0.14, 1.15],
-          [0.5, 0.14, 1.15],
-          [-0.5, 0.14, 1.55],
-          [0.5, 0.14, 1.55],
-        ] as const
-      ).map(([x, y, z], i) => (
-        <mesh key={i} position={[x, y, z]} castShadow>
-          <cylinderGeometry args={[0.04, 0.05, 0.28, 12]} />
-          <meshStandardMaterial map={wood} color="#c4a878" roughness={0.5} />
+      <mesh position={[1.15, 0.58, -0.22]} castShadow>
+        <sphereGeometry args={[0.16, 16, 12]} />
+        {fabricMat(fabric, "#e8e2da")}
+      </mesh>
+      {/* throw pillows on seat, facing window */}
+      <mesh position={[-0.45, 0.55, 0.05]} rotation={[0.15, 0.35, 0.08]} castShadow>
+        <sphereGeometry args={[0.2, 16, 12]} />
+        {fabricMat(fabric, "#f8f4ee")}
+      </mesh>
+      <mesh
+        position={[0.4, 0.52, 0.02]}
+        rotation={[0.12, -0.28, -0.06]}
+        scale={[1.15, 0.8, 0.72]}
+        castShadow
+      >
+        <sphereGeometry args={[0.2, 16, 12]} />
+        {fabricMat(fabric, "#f0ebe4")}
+      </mesh>
+
+      {/* —— Oval coffee table between sofa and window —— */}
+      <mesh position={[0, 0.32, -1.05]} scale={[1.15, 1, 0.78]} castShadow receiveShadow>
+        <cylinderGeometry args={[0.62, 0.62, 0.05, 40]} />
+        <meshStandardMaterial map={wood} color="#d4b896" roughness={0.4} metalness={0.1} />
+      </mesh>
+      <mesh position={[0, 0.15, -1.05]} castShadow>
+        <cylinderGeometry args={[0.09, 0.12, 0.28, 18]} />
+        <meshStandardMaterial map={wood} color="#c4a878" roughness={0.48} />
+      </mesh>
+      <mesh position={[0, 0.02, -1.05]} receiveShadow>
+        <cylinderGeometry args={[0.28, 0.3, 0.04, 24]} />
+        <meshStandardMaterial map={wood} color="#b89870" roughness={0.55} />
+      </mesh>
+
+      {/* —— Lounge chair (L of sofa), also faces window (−Z) —— */}
+      <group position={[-2.25, 0, -0.15]}>
+        <mesh position={[0, 0.32, 0.08]} castShadow>
+          <sphereGeometry args={[0.36, 22, 18]} />
+          {fabricMat(fabric, "#eee9e2")}
         </mesh>
-      ))}
-      {/* side chair */}
-      <mesh position={[-2.4, 0.28, 1.0]} castShadow>
-        <boxGeometry args={[0.75, 0.38, 0.75]} />
-        <meshStandardMaterial map={fabric} color="#ebe6e0" roughness={0.88} />
-      </mesh>
-      <mesh position={[-2.4, 0.58, 0.7]} castShadow>
-        <boxGeometry args={[0.75, 0.55, 0.18]} />
-        <meshStandardMaterial map={fabric} color="#e6e0d8" roughness={0.88} />
-      </mesh>
+        <mesh position={[0, 0.58, 0.28]} rotation={[0.45, 0, 0]} castShadow>
+          <capsuleGeometry args={[0.16, 0.38, 8, 14]} />
+          {fabricMat(fabric, "#e8e2da")}
+        </mesh>
+        <mesh position={[0, 0.1, 0.05]} castShadow>
+          <cylinderGeometry args={[0.22, 0.26, 0.1, 16]} />
+          <meshStandardMaterial map={wood} color="#a89070" roughness={0.5} />
+        </mesh>
+      </group>
+
+      {/* —— Lounge chair (R), faces window —— */}
+      <group position={[2.2, 0, 0.05]}>
+        <mesh position={[0, 0.32, 0.08]} castShadow>
+          <sphereGeometry args={[0.34, 22, 18]} />
+          {fabricMat(fabric, "#f0ebe5")}
+        </mesh>
+        <mesh position={[0, 0.56, 0.26]} rotation={[0.42, 0, 0]} castShadow>
+          <capsuleGeometry args={[0.15, 0.36, 8, 14]} />
+          {fabricMat(fabric, "#eae4dc")}
+        </mesh>
+        <mesh position={[0, 0.1, 0.05]} castShadow>
+          <cylinderGeometry args={[0.2, 0.24, 0.1, 16]} />
+          <meshStandardMaterial map={wood} color="#a89070" roughness={0.5} />
+        </mesh>
+      </group>
     </group>
   );
 }
@@ -321,41 +376,58 @@ function InteriorScene() {
         <meshStandardMaterial color="#2a2c34" metalness={0.4} roughness={0.4} />
       </mesh>
 
+      {/* Hydro at roof height; foliage hangs down from lights/roof into the room */}
       <HydroponicChannel
         length={W * 0.9}
-        plantHeight={0.55}
-        position={[0, H - 0.32, D / 2 - 0.18]}
+        plantHeight={1.35}
+        position={[0, H - 0.06, D / 2 - 0.14]}
         rotation={[0, Math.PI, 0]}
         accent={GROW}
         grow={ACCENT}
       />
       <HydroponicChannel
-        length={D * 0.85}
-        plantHeight={0.5}
-        position={[-W / 2 + 0.18, H - 0.32, 0]}
+        length={D * 0.88}
+        plantHeight={1.4}
+        position={[-W / 2 + 0.14, H - 0.06, 0]}
         rotation={[0, Math.PI / 2, 0]}
         accent={GROW}
         grow={ACCENT}
       />
       <HydroponicChannel
-        length={D * 0.85}
-        plantHeight={0.5}
-        position={[W / 2 - 0.18, H - 0.32, 0]}
+        length={D * 0.88}
+        plantHeight={1.4}
+        position={[W / 2 - 0.14, H - 0.06, 0]}
         rotation={[0, -Math.PI / 2, 0]}
         accent={GROW}
         grow={ACCENT}
       />
+      {/* short runs flanking the window */}
+      <HydroponicChannel
+        length={1.6}
+        plantHeight={1.15}
+        position={[-2.5, H - 0.06, -D / 2 + 0.14]}
+        accent={GROW}
+        grow={WARM}
+      />
+      <HydroponicChannel
+        length={1.6}
+        plantHeight={1.15}
+        position={[2.5, H - 0.06, -D / 2 + 0.14]}
+        accent={GROW}
+        grow={WARM}
+      />
 
-      <LoungeSet fabric={fabric} wood={wood} position={[0, 0, 0.15]} />
+      {/* Lounge at back of room, seats face the window (−Z) */}
+      <LoungeSet fabric={fabric} wood={wood} position={[0, 0, 0.85]} />
 
-      {/* console under window */}
-      <mesh position={[0, 0.4, -D / 2 + 0.48]} castShadow receiveShadow>
-        <boxGeometry args={[3.2, 0.7, 0.48]} />
-        <meshStandardMaterial map={wood} color="#3a3848" metalness={0.25} roughness={0.45} />
+      {/* low oval console under window — rounded, doesn't block the view */}
+      <mesh position={[0, 0.28, -D / 2 + 0.42]} scale={[1.4, 1, 0.55]} castShadow receiveShadow>
+        <cylinderGeometry args={[0.55, 0.58, 0.42, 32]} />
+        <meshStandardMaterial map={wood} color="#4a4658" metalness={0.22} roughness={0.48} />
       </mesh>
-      <mesh position={[0, 0.78, -D / 2 + 0.55]}>
-        <boxGeometry args={[1.7, 0.04, 0.24]} />
-        <meshStandardMaterial color={ACCENT} emissive={ACCENT} emissiveIntensity={0.95} />
+      <mesh position={[0, 0.52, -D / 2 + 0.42]} scale={[1.15, 1, 0.45]}>
+        <cylinderGeometry args={[0.42, 0.42, 0.03, 28]} />
+        <meshStandardMaterial color={ACCENT} emissive={ACCENT} emissiveIntensity={0.85} />
       </mesh>
 
       <mesh position={[0, 1.15, D / 2 - 0.04]}>

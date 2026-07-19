@@ -108,7 +108,6 @@ export default function LA08() {
         fillColor={ACCENT}
         fillIntensity={1.25}
         ambient={0.12}
-        godRays
         contact
       />
       {/* Two practicals max — was three high-intensity point lights */}

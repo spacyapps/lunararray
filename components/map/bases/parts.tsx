@@ -996,14 +996,83 @@ export function SunlightPodRing({
   );
 }
 
-/** Wall-top hydroponic channel: metal trough + continuous photoreal plant strip.
- *  No low-poly green spheres — foliage is a textured plane only. */
+/** Build color+alpha maps from a white-wall hydro photo so leaves show and
+ *  empty wall drops out. Crops UV to the leafy band (skips empty ceiling strip). */
+function prepHydroMaps(
+  src: THREE.Texture,
+  length: number,
+): { color: THREE.CanvasTexture; alpha: THREE.CanvasTexture } | null {
+  const img = src.image as HTMLImageElement | ImageBitmap | undefined;
+  if (!img || !("width" in img) || !img.width) return null;
+
+  const w = img.width;
+  const h = img.height;
+  // Source photo: tubes/lights along the top, hanging plants fill the middle.
+  // Crop to that band so the plane isn't mostly white wall.
+  const cropY0 = Math.floor(h * 0.08);
+  const cropY1 = Math.floor(h * 0.92);
+  const ch = cropY1 - cropY0;
+
+  const cv = document.createElement("canvas");
+  cv.width = w;
+  cv.height = ch;
+  const ctx = cv.getContext("2d")!;
+  ctx.drawImage(img, 0, cropY0, w, ch, 0, 0, w, ch);
+  const data = ctx.getImageData(0, 0, w, ch);
+  const px = data.data;
+  const alphaCv = document.createElement("canvas");
+  alphaCv.width = w;
+  alphaCv.height = ch;
+  const aCtx = alphaCv.getContext("2d")!;
+  const aImg = aCtx.createImageData(w, ch);
+  const ap = aImg.data;
+
+  for (let i = 0; i < px.length; i += 4) {
+    const r = px[i];
+    const g = px[i + 1];
+    const b = px[i + 2];
+    // White / pale wall → transparent; green foliage → opaque
+    const maxc = Math.max(r, g, b);
+    const minc = Math.min(r, g, b);
+    const sat = maxc === 0 ? 0 : (maxc - minc) / maxc;
+    const isGreen = g > r * 0.95 && g > b * 0.85 && g > 55;
+    const isLitTube = (r > 160 && b > 160 && g < 200) || (b > 180 && g > 150);
+    let a = 0;
+    if (isGreen) a = 255;
+    else if (isLitTube) a = 210;
+    else if (sat > 0.22 && maxc < 220) a = Math.min(255, sat * 320);
+    else if (maxc < 100) a = 40; // dark fixtures
+    ap[i] = ap[i + 1] = ap[i + 2] = a;
+    ap[i + 3] = 255;
+  }
+  aCtx.putImageData(aImg, 0, 0);
+
+  const color = new THREE.CanvasTexture(cv);
+  color.colorSpace = THREE.SRGBColorSpace;
+  color.wrapS = THREE.RepeatWrapping;
+  color.wrapT = THREE.ClampToEdgeWrapping;
+  color.repeat.set(Math.max(1.15, length / 2.2), 1);
+  color.anisotropy = 4;
+  color.needsUpdate = true;
+
+  const alpha = new THREE.CanvasTexture(alphaCv);
+  alpha.colorSpace = THREE.NoColorSpace;
+  alpha.wrapS = THREE.RepeatWrapping;
+  alpha.wrapT = THREE.ClampToEdgeWrapping;
+  alpha.repeat.set(Math.max(1.15, length / 2.2), 1);
+  alpha.needsUpdate = true;
+
+  return { color, alpha };
+}
+
+/** Wall-top hydroponic channel: trough at roof line, foliage hangs down into
+ *  the room (from lights/roof toward mid-wall). */
 export function HydroponicChannel({
   length = 6,
   accent = "#7cffc4",
   grow = "#c48aff",
   imageMap = "/textures/hydroponic-greenery.jpg",
-  plantHeight = 0.55,
+  plantHeight = 1.25,
   ...props
 }: {
   length?: number;
@@ -1012,7 +1081,11 @@ export function HydroponicChannel({
   imageMap?: string;
   plantHeight?: number;
 } & ThreeElements["group"]) {
-  const [leafTex, setLeafTex] = useState<THREE.Texture | null>(null);
+  const [maps, setMaps] = useState<{
+    color: THREE.Texture;
+    alpha: THREE.Texture;
+  } | null>(null);
+
   useEffect(() => {
     if (!imageMap) return;
     let cancelled = false;
@@ -1020,17 +1093,12 @@ export function HydroponicChannel({
       imageMap,
       (t) => {
         if (cancelled) return;
-        t.colorSpace = THREE.SRGBColorSpace;
-        t.wrapS = THREE.RepeatWrapping;
-        t.wrapT = THREE.ClampToEdgeWrapping;
-        t.repeat.set(Math.max(1.2, length / 2.4), 1);
-        t.anisotropy = 4;
-        t.needsUpdate = true;
-        setLeafTex(t);
+        const built = prepHydroMaps(t, length);
+        if (built) setMaps(built);
       },
       undefined,
       () => {
-        /* keep null — strip stays hidden rather than poly blobs */
+        /* keep null */
       },
     );
     return () => {
@@ -1040,29 +1108,30 @@ export function HydroponicChannel({
 
   return (
     <group {...props}>
-      {/* channel trough */}
+      {/* channel trough at the roof line */}
       <mesh position={[0, 0, 0]}>
-        <boxGeometry args={[length, 0.1, 0.26]} />
+        <boxGeometry args={[length, 0.08, 0.26]} />
         <meshStandardMaterial color="#2a3040" metalness={0.45} roughness={0.4} />
       </mesh>
       {/* hydro tube */}
-      <mesh position={[0, 0.07, 0]} rotation={[0, 0, Math.PI / 2]}>
-        <cylinderGeometry args={[0.04, 0.04, length * 0.96, 10]} />
+      <mesh position={[0, -0.02, 0]} rotation={[0, 0, Math.PI / 2]}>
+        <cylinderGeometry args={[0.035, 0.035, length * 0.96, 10]} />
         <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={0.5} roughness={0.3} />
       </mesh>
-      {/* grow light strip */}
-      <mesh position={[0, 0.12, 0.1]}>
-        <boxGeometry args={[length * 0.94, 0.025, 0.035]} />
-        <meshBasicMaterial color={grow} transparent opacity={0.75} />
+      {/* grow light under trough */}
+      <mesh position={[0, -0.05, 0.07]}>
+        <boxGeometry args={[length * 0.94, 0.022, 0.03]} />
+        <meshBasicMaterial color={grow} transparent opacity={0.72} />
       </mesh>
-      {/* continuous photoreal foliage curtain — the only plant geometry */}
-      {leafTex && (
-        <mesh position={[0, plantHeight * 0.5 + 0.08, 0.02]}>
+      {/* foliage hanging from roof → down past light height into the room */}
+      {maps && (
+        <mesh position={[0, -plantHeight * 0.5 - 0.04, 0.05]}>
           <planeGeometry args={[length * 0.98, plantHeight]} />
           <meshStandardMaterial
-            map={leafTex}
+            map={maps.color}
+            alphaMap={maps.alpha}
             transparent
-            alphaTest={0.12}
+            alphaTest={0.2}
             roughness={0.85}
             metalness={0}
             side={THREE.DoubleSide}

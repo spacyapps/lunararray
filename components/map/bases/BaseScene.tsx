@@ -93,7 +93,6 @@ export default function BaseScene({
         keyIntensity={station.tone === "military" ? 3.2 : 2.9}
         keyColor={station.tone === "military" ? "#e8f0ff" : "#fff1dc"}
         fillIntensity={station.tone === "military" ? 0.5 : 0.95}
-        godRays={station.tone !== "military"}
         // ContactShadows bake once — free after first frame
         contact
       />
