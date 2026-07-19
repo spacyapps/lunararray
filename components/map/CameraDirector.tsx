@@ -222,9 +222,19 @@ export default function CameraDirector({
       approachT0.current = null;
       interiorT0.current = null;
       const spec: OrbitSpec = ORBITS[view.id] ?? DEFAULT_ORBIT;
-      // Initial settle after dive / exit: place camera once, then hand off to OrbitControls.
+      const readyKey = `base-ready-${view.id}`;
+      // Fresh arrival from dive/rise/exit: clear prior dive anim (which has
+      // fired=true and would otherwise block onExploreReady forever).
       if (baseT0.current === null) {
         baseT0.current = now;
+        anim.current = {
+          key: `base-settle-${view.id}`,
+          t0: now,
+          fromPos: camera.position.clone(),
+          fromFocus: focus.current.clone(),
+          fromFov: pCam.fov,
+          held: false,
+        };
         onExploreReady?.(false);
         const pose = orbitPose(spec, phaseOffset.current);
         camera.position.copy(pose.pos);
@@ -234,29 +244,28 @@ export default function CameraDirector({
       }
       const sinceBase = now - baseT0.current;
       if (sinceBase < 1) {
-        setFade(1 - sinceBase / 0.9);
-        // Gentle auto-orbit only during the fade-in settle
-        if (sinceBase < 0.85 && anim.current?.key !== `exit-interior-${view.id}`) {
+        setFade(Math.max(0, 1 - sinceBase / 0.9));
+        // Gentle auto-orbit during fade-in so motion is visible immediately
+        if (anim.current?.key === `base-settle-${view.id}`) {
           const pose = orbitPose(spec, sinceBase + phaseOffset.current);
           camera.position.copy(pose.pos);
           camera.lookAt(0, pose.focusY, 0);
+          focus.current.set(0, pose.focusY, 0);
         }
       } else {
         setFade(0);
-        if (!anim.current?.fired) {
-          if (!anim.current) {
-            anim.current = {
-              key: `base-ready-${view.id}`,
-              t0: now,
-              fromPos: camera.position.clone(),
-              fromFocus: focus.current.clone(),
-              fromFov: pCam.fov,
-              held: false,
-              fired: true,
-            };
-          } else {
-            anim.current.fired = true;
-          }
+        if (anim.current?.key !== readyKey) {
+          // Hand off to OrbitControls with auto-rotate
+          phaseOffset.current = sinceBase + phaseOffset.current;
+          anim.current = {
+            key: readyKey,
+            t0: now,
+            fromPos: camera.position.clone(),
+            fromFocus: focus.current.clone(),
+            fromFov: pCam.fov,
+            held: false,
+            fired: true,
+          };
           onExploreReady?.(true);
         }
       }

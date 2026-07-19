@@ -9,6 +9,7 @@ import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import BaseEnvironment from "./BaseEnvironment";
 import BaseLighting from "./BaseLighting";
+import DomeGarden from "./DomeGarden";
 import {
   Beacon,
   LensDome,
@@ -116,11 +117,13 @@ export default function LA08() {
 
       <BaseEnvironment groundColor="#8a8694" rockTint="#6e6a78" seed={8} />
 
+      {/* Central park dome — glass over photoreal vegetation */}
+      <DomeGarden radius={9.5} y={0.06} />
       <LensDome
         r={9.5}
         squash={0.5}
         color="#d2f5da"
-        opacity={0.42}
+        opacity={0.38}
         emissive={PARK}
         imageMap="/textures/dome-glass.jpg"
       />
@@ -128,11 +131,12 @@ export default function LA08() {
 
       {OUTER_DOMES.map((d, i) => (
         <group key={i} position={[d.x, 0, d.z]}>
+          <DomeGarden radius={d.r} y={0.05} />
           <LensDome
             r={d.r}
             squash={0.5}
             color="#d2f5da"
-            opacity={0.4}
+            opacity={0.36}
             emissive={PARK}
             imageMap="/textures/dome-glass.jpg"
           />

@@ -83,23 +83,51 @@ function InstancedRocks({
 }
 
 function Earth() {
-  // Single sphere + one rim — was 5 meshes + point light.
+  // Photoreal Earth disk (Blue Marble) as a camera-facing billboard — sphere
+  // UVs fight a full-disk photo; from the lunar near side a billboard reads true.
+  const [map, setMap] = useState<THREE.Texture | null>(null);
+  const group = useRef<THREE.Group>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadTexture("/textures/earth-disk.jpg", {
+      wrap: THREE.ClampToEdgeWrapping,
+      repeat: [1, 1],
+      anisotropy: 4,
+    }).then((t) => {
+      if (!cancelled) setMap(t);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Face the base origin (viewer looks outward at Earth)
+  useLayoutEffect(() => {
+    if (!group.current) return;
+    group.current.lookAt(0, 8, 0);
+  }, []);
+
   return (
-    <group position={[-42, 52, -88]}>
-      <mesh>
-        <sphereGeometry args={[7.5, 32, 32]} />
-        <meshStandardMaterial
-          color="#2f6ad4"
-          roughness={0.55}
-          metalness={0.05}
-          emissive="#1a3a6a"
-          emissiveIntensity={0.35}
+    <group ref={group} position={[-42, 52, -88]}>
+      <sprite scale={[16, 16, 1]}>
+        <spriteMaterial
+          map={map ?? undefined}
+          color={map ? "#ffffff" : "#3d6fd6"}
+          transparent
+          depthWrite={false}
         />
-      </mesh>
-      <mesh scale={1.12}>
-        <sphereGeometry args={[7.5, 24, 24]} />
-        <meshBasicMaterial color="#7db4ff" transparent opacity={0.12} side={THREE.BackSide} depthWrite={false} />
-      </mesh>
+      </sprite>
+      {/* atmospheric halo */}
+      <sprite scale={[19.5, 19.5, 1]}>
+        <spriteMaterial
+          color="#7db4ff"
+          transparent
+          opacity={0.14}
+          depthWrite={false}
+          blending={THREE.AdditiveBlending}
+        />
+      </sprite>
     </group>
   );
 }

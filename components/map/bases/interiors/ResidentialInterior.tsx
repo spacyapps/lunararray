@@ -1,134 +1,208 @@
 "use client";
 
-// LA-08 residential interior — photoreal apartment bay. Warm practicals,
-// PBR panels, lunar viewport, wall-crown hydroponics (no soil).
+// LA-08 residential interior — photoreal apartment bay:
+// ceiling artificial sunshine, digital wall panels, window with lunar view,
+// textured furniture (image cards, not bare boxes), wall-crown hydroponics.
 
 import { useEffect, useState } from "react";
 import * as THREE from "three";
 import { ContactShadows } from "@react-three/drei";
 import { HydroponicChannel } from "../parts";
 import { RendererQuality } from "../BaseLighting";
+import { loadTexture } from "@/lib/three/textureCache";
 
 const WARM = "#ffd9a0";
 const ACCENT = "#c48aff";
 const GROW = "#7cffc4";
-const PANEL = "#e8e4dc";
+const SUN = "#ffe8c4";
 
-function useMap(url: string, repeatX = 2, repeatY = 1.4) {
+function useTex(url: string, repeatX = 1, repeatY = 1, wrap: THREE.Wrapping = THREE.RepeatWrapping) {
   const [tex, setTex] = useState<THREE.Texture | null>(null);
   useEffect(() => {
     let cancelled = false;
-    new THREE.TextureLoader().load(url, (t) => {
-      if (cancelled) return;
-      t.colorSpace = THREE.SRGBColorSpace;
-      t.wrapS = t.wrapT = THREE.RepeatWrapping;
-      t.repeat.set(repeatX, repeatY);
-      t.anisotropy = 8;
-      setTex(t);
+    loadTexture(url, { repeat: [repeatX, repeatY], wrap, anisotropy: 4 }).then((t) => {
+      if (!cancelled) setTex(t);
     });
     return () => {
       cancelled = true;
     };
-  }, [url, repeatX, repeatY]);
+  }, [url, repeatX, repeatY, wrap]);
   return tex;
 }
 
-function SoftSconce({
+/** Soft rectangular photo card — used for furniture faces, art, screens. */
+function PhotoPanel({
+  map,
+  width,
+  height,
   position,
-  color = WARM,
+  rotation,
+  emissive,
+  emissiveIntensity = 0,
+  color = "#ffffff",
 }: {
+  map?: THREE.Texture | null;
+  width: number;
+  height: number;
   position: [number, number, number];
+  rotation?: [number, number, number];
+  emissive?: string;
+  emissiveIntensity?: number;
   color?: string;
 }) {
   return (
-    <group position={position}>
-      <mesh castShadow>
-        <boxGeometry args={[0.38, 0.09, 0.14]} />
-        <meshStandardMaterial color="#d8dce6" metalness={0.65} roughness={0.28} />
+    <mesh position={position} rotation={rotation} castShadow receiveShadow>
+      <planeGeometry args={[width, height]} />
+      <meshStandardMaterial
+        map={map ?? undefined}
+        color={map ? color : "#4a4558"}
+        roughness={0.55}
+        metalness={0.08}
+        emissive={emissive ?? "#000000"}
+        emissiveIntensity={emissiveIntensity}
+        side={THREE.DoubleSide}
+      />
+    </mesh>
+  );
+}
+
+function CeilingSun({ width, depth, y }: { width: number; depth: number; y: number }) {
+  return (
+    <group position={[0, y, 0]}>
+      {/* recessed light tray */}
+      <mesh position={[0, -0.02, 0]}>
+        <boxGeometry args={[width * 0.78, 0.06, depth * 0.55]} />
+        <meshStandardMaterial color="#e8e4dc" metalness={0.35} roughness={0.4} />
       </mesh>
-      <mesh position={[0, -0.06, 0.02]}>
-        <boxGeometry args={[0.3, 0.045, 0.07]} />
-        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={1.3} roughness={0.3} />
+      {/* glowing diffuser panels — artificial sunshine */}
+      <mesh position={[0, -0.06, 0]} rotation={[Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[width * 0.72, depth * 0.5]} />
+        <meshStandardMaterial
+          color={SUN}
+          emissive={SUN}
+          emissiveIntensity={1.35}
+          roughness={0.35}
+          side={THREE.DoubleSide}
+        />
       </mesh>
-      <pointLight position={[0, -0.3, 0.35]} intensity={8} color={color} distance={5} decay={2} />
+      {/* curved LED traces */}
+      {[-0.35, 0, 0.35].map((z, i) => (
+        <mesh key={i} position={[0, -0.055, z * depth * 0.22]} rotation={[Math.PI / 2, 0, 0]}>
+          <planeGeometry args={[width * 0.55, 0.04]} />
+          <meshBasicMaterial color={WARM} transparent opacity={0.75} />
+        </mesh>
+      ))}
+      <pointLight position={[0, -0.4, 0]} intensity={28} color={SUN} distance={14} decay={2} />
+      <pointLight position={[-1.2, -0.5, 0.8]} intensity={8} color={SUN} distance={8} decay={2} />
+      <pointLight position={[1.2, -0.5, -0.5]} intensity={6} color={WARM} distance={7} decay={2} />
     </group>
   );
 }
 
-function Lounge({ position }: { position: [number, number, number] }) {
+function DigitalPanel({
+  position,
+  rotation,
+  w = 1.6,
+  h = 0.95,
+}: {
+  position: [number, number, number];
+  rotation?: [number, number, number];
+  w?: number;
+  h?: number;
+}) {
   return (
-    <group position={position}>
-      <mesh position={[0, 0.28, 0]} scale={[2.5, 0.48, 0.95]} castShadow receiveShadow>
-        <boxGeometry />
-        <meshStandardMaterial color="#5a4e68" roughness={0.78} metalness={0.05} />
+    <group position={position} rotation={rotation}>
+      {/* bezel */}
+      <mesh position={[0, 0, -0.02]} castShadow>
+        <boxGeometry args={[w + 0.08, h + 0.08, 0.04]} />
+        <meshStandardMaterial color="#1a1c24" metalness={0.6} roughness={0.35} />
       </mesh>
-      <mesh position={[0, 0.58, -0.3]} scale={[2.5, 0.58, 0.3]} castShadow>
-        <boxGeometry />
-        <meshStandardMaterial color="#4a4058" roughness={0.78} />
+      {/* screen */}
+      <mesh>
+        <planeGeometry args={[w, h]} />
+        <meshStandardMaterial
+          color="#0a1628"
+          emissive="#5cd6ff"
+          emissiveIntensity={0.45}
+          roughness={0.25}
+          metalness={0.2}
+        />
       </mesh>
-      <mesh position={[-0.55, 0.54, 0.06]} scale={[0.58, 0.2, 0.48]} rotation={[0.1, 0.2, 0]} castShadow>
-        <boxGeometry />
-        <meshStandardMaterial color={ACCENT} roughness={0.85} emissive={ACCENT} emissiveIntensity={0.12} />
+      {/* UI chrome lines */}
+      <mesh position={[0, h * 0.28, 0.01]}>
+        <planeGeometry args={[w * 0.82, 0.03]} />
+        <meshBasicMaterial color={ACCENT} transparent opacity={0.7} />
       </mesh>
-      <mesh position={[0.5, 0.54, 0.06]} scale={[0.58, 0.2, 0.48]} rotation={[0.08, -0.15, 0]} castShadow>
-        <boxGeometry />
-        <meshStandardMaterial color={WARM} roughness={0.85} />
+      <mesh position={[-w * 0.2, 0, 0.01]}>
+        <planeGeometry args={[w * 0.35, h * 0.4]} />
+        <meshBasicMaterial color="#7cffc4" transparent opacity={0.12} />
       </mesh>
-      <mesh position={[0, 0.24, 1.15]} scale={[1.15, 0.07, 0.58]} castShadow>
-        <boxGeometry />
-        <meshPhysicalMaterial color="#c8c4bc" metalness={0.35} roughness={0.25} clearcoat={0.4} />
+      <mesh position={[w * 0.22, -h * 0.1, 0.01]}>
+        <planeGeometry args={[w * 0.32, h * 0.28]} />
+        <meshBasicMaterial color="#5cd6ff" transparent opacity={0.1} />
       </mesh>
-      <mesh position={[0, 0.1, 1.15]} castShadow>
-        <cylinderGeometry args={[0.09, 0.13, 0.22, 16]} />
-        <meshStandardMaterial color="#9aa0b4" metalness={0.55} roughness={0.35} />
-      </mesh>
+      <pointLight position={[0, 0, 0.3]} intensity={2.5} color="#5cd6ff" distance={3.5} decay={2} />
     </group>
   );
 }
 
-function PlantNook({ position }: { position: [number, number, number] }) {
+function LoungeSet({
+  furniture,
+  position,
+}: {
+  furniture: THREE.Texture | null;
+  position: [number, number, number];
+}) {
   return (
     <group position={position}>
-      <mesh position={[0, 0.55, 0]} castShadow>
-        <cylinderGeometry args={[0.24, 0.3, 1.15, 24]} />
-        <meshStandardMaterial color="#d8d4cc" roughness={0.5} metalness={0.15} />
+      {/* sofa back as photo plane + soft body volume */}
+      <mesh position={[0, 0.42, -0.35]} castShadow>
+        <boxGeometry args={[2.6, 0.85, 0.55]} />
+        <meshStandardMaterial color="#6a6078" roughness={0.82} map={furniture ?? undefined} />
       </mesh>
-      <mesh position={[0, 1.18, 0]}>
-        <torusGeometry args={[0.22, 0.045, 12, 32]} />
-        <meshStandardMaterial color={GROW} emissive={GROW} emissiveIntensity={0.75} roughness={0.3} />
+      <mesh position={[0, 0.28, 0.15]} castShadow receiveShadow>
+        <boxGeometry args={[2.6, 0.38, 0.95]} />
+        <meshStandardMaterial color="#5a5068" roughness={0.85} />
       </mesh>
-      <mesh position={[0, 1.5, 0]} scale={[0.38, 0.6, 0.38]} castShadow>
-        <sphereGeometry args={[1, 24, 18]} />
-        <meshStandardMaterial color="#4ecf82" roughness={0.75} emissive="#1a5030" emissiveIntensity={0.25} />
+      {/* cushions with fabric-like tone */}
+      <mesh position={[-0.65, 0.52, 0.2]} rotation={[0.15, 0.2, 0]} castShadow>
+        <boxGeometry args={[0.7, 0.22, 0.55]} />
+        <meshStandardMaterial color={ACCENT} roughness={0.9} emissive={ACCENT} emissiveIntensity={0.06} />
       </mesh>
-      <pointLight position={[0, 1.55, 0]} intensity={3.5} color={GROW} distance={3.5} />
+      <mesh position={[0.55, 0.52, 0.2]} rotation={[0.12, -0.15, 0]} castShadow>
+        <boxGeometry args={[0.7, 0.22, 0.55]} />
+        <meshStandardMaterial color={WARM} roughness={0.9} />
+      </mesh>
+      {/* coffee table — wood-toned */}
+      <mesh position={[0, 0.28, 1.25]} castShadow>
+        <boxGeometry args={[1.35, 0.08, 0.72]} />
+        <meshStandardMaterial color="#8a6a48" roughness={0.45} metalness={0.1} map={furniture ?? undefined} />
+      </mesh>
+      <mesh position={[0, 0.12, 1.25]} castShadow>
+        <cylinderGeometry args={[0.12, 0.16, 0.24, 20]} />
+        <meshStandardMaterial color="#c8b89a" metalness={0.4} roughness={0.35} />
+      </mesh>
     </group>
   );
 }
 
 export default function ResidentialInterior() {
-  const wallTex = useMap("/textures/interior-wall.jpg", 2.2, 1.5);
-  const floorTex = useMap("/textures/interior-floor.jpg", 3, 3);
+  const wallTex = useTex("/textures/interior-wall.jpg", 2.2, 1.5);
+  const floorTex = useTex("/textures/interior-floor.jpg", 3, 3);
+  const furniture = useTex("/textures/interior-furniture.jpg", 1, 1, THREE.ClampToEdgeWrapping);
+  const windowView = useTex("/textures/window-lunar-view.jpg", 1, 1, THREE.ClampToEdgeWrapping);
 
   const W = 8.4;
   const D = 7.2;
-  const H = 3.1;
+  const H = 3.15;
 
   return (
     <group>
       <RendererQuality shadows />
-      <ambientLight intensity={0.18} color="#ffe8d0" />
-      <hemisphereLight args={["#ffe8c8", "#2a2438", 0.35]} />
-      <directionalLight
-        position={[2.5, 4.5, 1.5]}
-        intensity={0.55}
-        color="#ffe8c8"
-        castShadow
-        shadow-mapSize={[1024, 1024]}
-      />
-      <pointLight position={[0, 2.7, 0]} intensity={20} color={WARM} distance={14} decay={2} />
-      <pointLight position={[2.4, 2.2, 1.5]} intensity={10} color={GROW} distance={9} decay={2} />
+      <ambientLight intensity={0.2} color="#ffe8d0" />
+      <hemisphereLight args={["#ffe8c8", "#2a2438", 0.32]} />
 
+      {/* floor */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]} receiveShadow>
         <planeGeometry args={[W, D]} />
         <meshStandardMaterial
@@ -141,19 +215,25 @@ export default function ResidentialInterior() {
         />
       </mesh>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
-        <ringGeometry args={[1.8, 2.08, 64]} />
-        <meshStandardMaterial color={ACCENT} emissive={ACCENT} emissiveIntensity={0.35} transparent opacity={0.25} side={THREE.DoubleSide} />
+        <ringGeometry args={[1.7, 1.95, 48]} />
+        <meshStandardMaterial
+          color={ACCENT}
+          emissive={ACCENT}
+          emissiveIntensity={0.3}
+          transparent
+          opacity={0.22}
+          side={THREE.DoubleSide}
+        />
       </mesh>
 
+      {/* ceiling + artificial sunshine */}
       <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, H, 0]}>
         <planeGeometry args={[W, D]} />
-        <meshStandardMaterial color="#1a1c24" roughness={0.9} />
+        <meshStandardMaterial color="#1c1e28" roughness={0.85} />
       </mesh>
-      <mesh position={[0, H - 0.08, 0]}>
-        <boxGeometry args={[W * 0.72, 0.04, D * 0.55]} />
-        <meshStandardMaterial color={WARM} emissive={WARM} emissiveIntensity={0.55} transparent opacity={0.55} />
-      </mesh>
+      <CeilingSun width={W} depth={D} y={H - 0.04} />
 
+      {/* walls */}
       {(
         [
           { pos: [0, H / 2, -D / 2] as [number, number, number], rot: [0, 0, 0] as [number, number, number], w: W },
@@ -165,95 +245,100 @@ export default function ResidentialInterior() {
         <mesh key={i} position={wall.pos} rotation={wall.rot} receiveShadow>
           <planeGeometry args={[wall.w, H]} />
           <meshStandardMaterial
-            color={PANEL}
+            color="#e8e4dc"
             map={wallTex ?? undefined}
             bumpMap={wallTex ?? undefined}
             bumpScale={0.03}
             roughness={0.65}
-            metalness={0.08}
+            metalness={0.06}
           />
         </mesh>
       ))}
 
-      {/* lunar viewport */}
-      <group position={[0, 1.55, -D / 2 + 0.02]}>
-        <mesh>
-          <planeGeometry args={[3.6, 1.9]} />
-          <meshBasicMaterial color="#05060a" />
+      {/* ─── Window with real lunar / Earth view ─── */}
+      <group position={[0, 1.55, -D / 2 + 0.04]}>
+        {/* outer frame — rounded feel via thick rails */}
+        <mesh position={[0, 0, -0.02]} castShadow>
+          <boxGeometry args={[4.05, 2.25, 0.12]} />
+          <meshStandardMaterial color="#9aa0b4" metalness={0.55} roughness={0.32} />
         </mesh>
+        {/* view photo */}
         <mesh position={[0, 0, 0.02]}>
-          <planeGeometry args={[3.4, 1.7]} />
-          <meshPhysicalMaterial
-            color="#a8d8ff"
-            transparent
-            opacity={0.28}
-            roughness={0.05}
-            metalness={0.1}
-            transmission={0.55}
-            thickness={0.4}
-            clearcoat={0.5}
-            emissive="#5cd6ff"
-            emissiveIntensity={0.12}
+          <planeGeometry args={[3.7, 1.95]} />
+          <meshStandardMaterial
+            map={windowView ?? undefined}
+            color={windowView ? "#ffffff" : "#0a1020"}
+            emissive={windowView ? "#203040" : "#000000"}
+            emissiveIntensity={windowView ? 0.15 : 0}
+            roughness={0.35}
+            metalness={0.05}
           />
         </mesh>
-        <mesh position={[-0.6, 0.2, -0.05]}>
-          <circleGeometry args={[0.38, 32]} />
-          <meshStandardMaterial color="#5cd6ff" emissive="#5cd6ff" emissiveIntensity={0.8} transparent opacity={0.65} />
+        {/* glass sheen */}
+        <mesh position={[0, 0, 0.04]}>
+          <planeGeometry args={[3.7, 1.95]} />
+          <meshStandardMaterial
+            color="#a8d8ff"
+            transparent
+            opacity={0.08}
+            roughness={0.05}
+            metalness={0.2}
+            depthWrite={false}
+          />
         </mesh>
-        <mesh position={[0, -0.55, -0.04]} scale={[3.2, 0.5, 1]}>
-          <planeGeometry />
-          <meshBasicMaterial color="#ffb45c" transparent opacity={0.14} />
+        {/* mullion */}
+        <mesh position={[0, 0, 0.05]} castShadow>
+          <boxGeometry args={[0.06, 1.95, 0.04]} />
+          <meshStandardMaterial color="#c8ccd8" metalness={0.5} roughness={0.35} />
         </mesh>
-        {(
-          [
-            [0, 0.95, 0.04, 3.7, 0.1, 0.08],
-            [0, -0.95, 0.04, 3.7, 0.1, 0.08],
-            [-1.8, 0, 0.04, 0.1, 2.0, 0.08],
-            [1.8, 0, 0.04, 0.1, 2.0, 0.08],
-            [0, 0, 0.04, 0.06, 1.9, 0.06],
-          ] as const
-        ).map(([x, y, z, sx, sy, sz], i) => (
-          <mesh key={i} position={[x, y, z]} scale={[sx, sy, sz]} castShadow>
-            <boxGeometry />
-            <meshStandardMaterial color="#9aa0b4" metalness={0.55} roughness={0.32} />
-          </mesh>
-        ))}
       </group>
 
-      <HydroponicChannel length={W * 0.88} position={[0, H - 0.22, D / 2 - 0.2]} rotation={[0, Math.PI, 0]} accent={GROW} grow={ACCENT} />
-      <HydroponicChannel length={D * 0.82} position={[-W / 2 + 0.2, H - 0.22, 0]} rotation={[0, Math.PI / 2, 0]} accent={GROW} grow={ACCENT} />
-      <HydroponicChannel length={D * 0.82} position={[W / 2 - 0.2, H - 0.22, 0]} rotation={[0, -Math.PI / 2, 0]} accent={GROW} grow={ACCENT} />
-      <HydroponicChannel length={1.8} position={[-2.6, H - 0.22, -D / 2 + 0.2]} accent={GROW} grow={WARM} />
-      <HydroponicChannel length={1.8} position={[2.6, H - 0.22, -D / 2 + 0.2]} accent={GROW} grow={WARM} />
+      {/* digital panels */}
+      <DigitalPanel position={[-W / 2 + 0.08, 1.7, -0.8]} rotation={[0, Math.PI / 2, 0]} w={1.5} h={0.9} />
+      <DigitalPanel position={[W / 2 - 0.08, 1.55, 0.6]} rotation={[0, -Math.PI / 2, 0]} w={1.35} h={0.85} />
 
-      <Lounge position={[0, 0, 0.6]} />
-      <PlantNook position={[-3.1, 0, -2.2]} />
-      <PlantNook position={[3.1, 0, -1.8]} />
+      {/* art / furniture photo accent on side wall */}
+      <PhotoPanel
+        map={furniture}
+        width={1.8}
+        height={1.05}
+        position={[0, 2.05, D / 2 - 0.06]}
+        rotation={[0, Math.PI, 0]}
+      />
 
-      <SoftSconce position={[-2.2, 2.35, -D / 2 + 0.15]} />
-      <SoftSconce position={[2.2, 2.35, -D / 2 + 0.15]} />
-      <SoftSconce position={[-W / 2 + 0.15, 2.2, 1.2]} color={ACCENT} />
-      <SoftSconce position={[W / 2 - 0.15, 2.2, 1.2]} color={GROW} />
+      {/* hydroponics along wall crowns */}
+      <HydroponicChannel length={W * 0.88} position={[0, H - 0.24, D / 2 - 0.2]} rotation={[0, Math.PI, 0]} accent={GROW} grow={ACCENT} />
+      <HydroponicChannel length={D * 0.82} position={[-W / 2 + 0.2, H - 0.24, 0]} rotation={[0, Math.PI / 2, 0]} accent={GROW} grow={ACCENT} />
+      <HydroponicChannel length={D * 0.82} position={[W / 2 - 0.2, H - 0.24, 0]} rotation={[0, -Math.PI / 2, 0]} accent={GROW} grow={ACCENT} />
+      <HydroponicChannel length={1.7} position={[-2.55, H - 0.24, -D / 2 + 0.2]} accent={GROW} grow={WARM} />
+      <HydroponicChannel length={1.7} position={[2.55, H - 0.24, -D / 2 + 0.2]} accent={GROW} grow={WARM} />
 
-      <mesh position={[0, 0.55, -D / 2 + 0.45]} scale={[2.8, 0.9, 0.45]} castShadow>
-        <boxGeometry />
-        <meshStandardMaterial color="#2c3040" roughness={0.45} metalness={0.35} />
+      <LoungeSet furniture={furniture} position={[0, 0, 0.35]} />
+
+      {/* console under window */}
+      <mesh position={[0, 0.48, -D / 2 + 0.5]} castShadow>
+        <boxGeometry args={[3.0, 0.85, 0.5]} />
+        <meshStandardMaterial color="#2c3040" roughness={0.42} metalness={0.35} />
       </mesh>
-      <mesh position={[0, 0.95, -D / 2 + 0.55]} scale={[1.4, 0.06, 0.25]}>
-        <boxGeometry />
-        <meshStandardMaterial color={ACCENT} emissive={ACCENT} emissiveIntensity={1.0} transparent opacity={0.85} />
+      <mesh position={[0, 0.92, -D / 2 + 0.58]}>
+        <boxGeometry args={[1.5, 0.05, 0.28]} />
+        <meshStandardMaterial color={ACCENT} emissive={ACCENT} emissiveIntensity={0.9} />
       </mesh>
 
-      <mesh position={[0, 1.2, D / 2 - 0.05]}>
-        <planeGeometry args={[1.6, 2.2]} />
-        <meshStandardMaterial color={ACCENT} emissive={ACCENT} emissiveIntensity={0.25} transparent opacity={0.15} side={THREE.DoubleSide} />
-      </mesh>
+      {/* entrance glow (south) */}
       <mesh position={[0, 1.2, D / 2 - 0.04]}>
-        <ringGeometry args={[0.7, 0.78, 40]} />
-        <meshStandardMaterial color={WARM} emissive={WARM} emissiveIntensity={0.7} transparent opacity={0.55} side={THREE.DoubleSide} />
+        <ringGeometry args={[0.65, 0.78, 40]} />
+        <meshStandardMaterial
+          color={WARM}
+          emissive={WARM}
+          emissiveIntensity={0.65}
+          transparent
+          opacity={0.5}
+          side={THREE.DoubleSide}
+        />
       </mesh>
 
-      <ContactShadows position={[0, 0.03, 0]} opacity={0.55} scale={12} blur={2.2} far={6} resolution={512} color="#0a0810" />
+      <ContactShadows position={[0, 0.03, 0]} opacity={0.5} scale={12} blur={2} far={6} resolution={512} frames={1} color="#0a0810" />
     </group>
   );
 }

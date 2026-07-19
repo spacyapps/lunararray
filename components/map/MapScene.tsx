@@ -14,6 +14,8 @@ import Moon from "./Moon";
 import OctogramLines from "./OctogramLines";
 import Hotspots from "./Hotspots";
 import Starfield3D from "./Starfield3D";
+import SpaceSun from "./SpaceSun";
+import ExploreControls from "./ExploreControls";
 import CameraDirector from "./CameraDirector";
 import BaseScene from "./bases/BaseScene";
 import { RendererQuality } from "./bases/BaseLighting";
@@ -157,7 +159,12 @@ export default function MapScene() {
         <color attach="background" args={["#05060a"]} />
         <ambientLight intensity={showInterior ? 0 : 0.18} />
         {/* Starfield only on the moon map — not inside bases (saves draw). */}
-        {showMapWorld && <Starfield3D />}
+        {showMapWorld && (
+          <>
+            <Starfield3D />
+            <SpaceSun />
+          </>
+        )}
 
         <group visible={showMapWorld}>
           <directionalLight position={[-6, 4, 5]} intensity={2.2} color="#fff4e0" />
@@ -205,40 +212,33 @@ export default function MapScene() {
             maxAzimuthAngle={Math.PI * 0.18}
             minPolarAngle={Math.PI * 0.36}
             maxPolarAngle={Math.PI * 0.53}
+            autoRotate
+            autoRotateSpeed={0.12}
           />
         )}
-        {exploreExterior && (
-          <OrbitControls
-            makeDefault
-            enablePan={false}
-            enableDamping
-            dampingFactor={0.055}
-            rotateSpeed={0.42}
-            zoomSpeed={0.7}
+        {/* Exterior explore: always mounted while at base so handoff is seamless */}
+        {(view.mode === "base" || view.mode === "approach") && (
+          <ExploreControls
+            enabled={exploreExterior}
+            target={[0, view.mode === "approach" ? approachSpec.focusHeight : orbitSpec.focusHeight, 0]}
             minDistance={view.mode === "approach" ? approachSpec.radius * 0.55 : orbitSpec.radius * 0.45}
             maxDistance={view.mode === "approach" ? approachSpec.radius * 1.45 : orbitSpec.radius * 1.55}
             minPolarAngle={0.18}
             maxPolarAngle={Math.PI * 0.48}
-            target={[0, view.mode === "approach" ? approachSpec.focusHeight : orbitSpec.focusHeight, 0]}
-            autoRotate
-            autoRotateSpeed={0.28}
+            autoRotateSpeed={0.35}
           />
         )}
-        {exploreInterior && (
-          <OrbitControls
-            makeDefault
-            enablePan={false}
-            enableDamping
-            dampingFactor={0.06}
-            rotateSpeed={0.45}
-            zoomSpeed={0.55}
+        {view.mode === "interior" && (
+          <ExploreControls
+            enabled={exploreInterior}
+            target={interiorSpec.focus}
             minDistance={1.4}
             maxDistance={4.2}
             minPolarAngle={0.55}
             maxPolarAngle={Math.PI * 0.58}
-            target={interiorSpec.focus}
-            autoRotate
-            autoRotateSpeed={0.18}
+            autoRotateSpeed={0.22}
+            rotateSpeed={0.45}
+            zoomSpeed={0.55}
           />
         )}
       </Canvas>
