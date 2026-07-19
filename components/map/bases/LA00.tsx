@@ -36,11 +36,11 @@ function Shuttle(props: { position: [number, number, number]; rotation?: [number
       {/* canted tail fins */}
       <mesh position={[-2.2, 1.4, 0.5]} rotation={[0.5, 0, -0.4]} scale={[0.1, 1.4, 0.5]}>
         <boxGeometry />
-        <meshToonMaterial color={ACCENT} />
+        <meshStandardMaterial color={ACCENT} />
       </mesh>
       <mesh position={[-2.2, 1.4, -0.5]} rotation={[-0.5, 0, -0.4]} scale={[0.1, 1.4, 0.5]}>
         <boxGeometry />
-        <meshToonMaterial color={ACCENT} />
+        <meshStandardMaterial color={ACCENT} />
       </mesh>
       <Beacon color={ACCENT} size={0.12} speed={3} position={[2.4, 0.95, 0]} />
     </group>
@@ -94,20 +94,20 @@ function AccessHatch({ mode, onTap }: { mode: HatchMode; onTap: () => void }) {
       {/* collar + hood — small, severe, deliberately un-teardrop */}
       <mesh position={[0, 0.25, 0]}>
         <cylinderGeometry args={[1.5, 1.65, 0.5, 20]} />
-        <meshToonMaterial color="#9aa0b4" />
+        <meshStandardMaterial color="#9aa0b4" />
       </mesh>
       <mesh position={[0, 1.05, 0]} scale={[1.7, 1.2, 1.5]}>
         <boxGeometry />
-        <meshToonMaterial color="#3c4050" />
+        <meshStandardMaterial color="#3c4050" />
       </mesh>
       <mesh position={[0, 1.72, 0]} scale={[1.9, 0.16, 1.7]}>
         <boxGeometry />
-        <meshToonMaterial color="#9aa0b4" />
+        <meshStandardMaterial color="#9aa0b4" />
       </mesh>
       {/* blast door + keypad glow */}
       <mesh position={[0.3, 0.98, 0.76]} scale={[0.8, 0.9, 0.06]}>
         <boxGeometry />
-        <meshToonMaterial color="#14171f" />
+        <meshStandardMaterial color="#14171f" />
       </mesh>
       <mesh position={[-0.5, 1.15, 0.78]} scale={[0.2, 0.28, 0.03]}>
         <boxGeometry />
@@ -764,7 +764,7 @@ export default function LA00() {
         <group key={i} position={[x, 0, z]}>
           <mesh position={[0, 2.6, 0]}>
             <cylinderGeometry args={[0.1, 0.22, 5.2, 8]} />
-            <meshToonMaterial color={HULL} />
+            <meshStandardMaterial color={HULL} />
           </mesh>
           <Beacon color={ACCENT} size={0.18} speed={2 + i * 0.7} position={[0, 5.5, 0]} />
         </group>

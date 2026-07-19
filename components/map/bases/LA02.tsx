@@ -63,7 +63,7 @@ function Radar() {
     <group position={[9, 0, -9]}>
       <mesh position={[0, 2.4, 0]}>
         <coneGeometry args={[2.6, 4.8, 4]} />
-        <meshStandardMaterial color={STEEL} roughness={0.85} metalness={0.35} flatShading />
+        <meshStandardMaterial color={STEEL} roughness={0.7} metalness={0.45} />
       </mesh>
       <group ref={blade} position={[0, 5.4, 0]}>
         <mesh scale={[5, 0.9, 0.12]}>

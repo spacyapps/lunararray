@@ -92,11 +92,11 @@ export default function LA07() {
         <group key={i} position={[x, 0, z]} rotation={[0, seedRand(i * 5) * Math.PI, 0]}>
           <mesh position={[0, 0.55, 0]} scale={[2.4, 1.1, 1.4]}>
             <boxGeometry />
-            <meshToonMaterial color="#9aa0b4" />
+            <meshStandardMaterial color="#9aa0b4" />
           </mesh>
           <mesh position={[0.6, 1.6, 0]} rotation={[0, 0, -0.7]} scale={[0.25, 2.6, 0.25]}>
             <boxGeometry />
-            <meshToonMaterial color={ACCENT} />
+            <meshStandardMaterial color={ACCENT} />
           </mesh>
           <Beacon color={AMBERISH(i)} size={0.1} speed={3 + i} position={[0, 1.4, 0]} />
         </group>

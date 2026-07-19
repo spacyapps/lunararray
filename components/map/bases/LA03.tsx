@@ -28,7 +28,7 @@ function Caldera() {
       {tiers.map((t, i) => (
         <mesh key={i} position={[0, t.h / 2, 0]}>
           <cylinderGeometry args={[t.r * 0.92, t.r, t.h, 40]} />
-          <meshToonMaterial color={i % 2 ? ROCK_DARK : ROCK} />
+          <meshStandardMaterial color={i % 2 ? ROCK_DARK : ROCK} />
         </mesh>
       ))}
       {/* throat — dark bore with ore glow */}
@@ -54,7 +54,7 @@ function Caldera() {
             rotation={[seedRand(i) * 3, seedRand(i + 1) * 3, 0]}
           >
             <icosahedronGeometry args={[1, 0]} />
-            <meshStandardMaterial color="#3a3226" emissive={ORE} emissiveIntensity={0.9} flatShading />
+            <meshStandardMaterial color="#3a3226" emissive={ORE} emissiveIntensity={0.9} roughness={0.75} metalness={0.15} />
           </mesh>
         );
       })}
@@ -94,7 +94,7 @@ function CutterWheel() {
       <group ref={wheel}>
         <mesh>
           <torusGeometry args={[4.6, 1, 12, 36]} />
-          <meshToonMaterial color="#c8ccd8" map={wheelTex} bumpMap={wheelTex} bumpScale={0.03} />
+          <meshStandardMaterial color="#c8ccd8" map={wheelTex} bumpMap={wheelTex} bumpScale={0.03} />
         </mesh>
         {Array.from({ length: 12 }).map((_, i) => {
           const a = (i / 12) * Math.PI * 2;
@@ -105,7 +105,7 @@ function CutterWheel() {
               rotation={[0, 0, a - Math.PI / 2]}
             >
               <coneGeometry args={[0.55, 1.5, 4]} />
-              <meshToonMaterial color={ACCENT} />
+              <meshStandardMaterial color={ACCENT} />
             </mesh>
           );
         })}
@@ -113,7 +113,7 @@ function CutterWheel() {
       {/* boom arm down to the ground */}
       <mesh position={[3.5, -3.4, 1.5]} rotation={[0.1, 0, 0.9]} scale={[1.4, 9, 1.4]}>
         <cylinderGeometry args={[0.35, 0.5, 1, 10]} />
-        <meshToonMaterial color="#9aa0b4" map={boomTex} bumpMap={boomTex} bumpScale={0.03} />
+        <meshStandardMaterial color="#9aa0b4" map={boomTex} bumpMap={boomTex} bumpScale={0.03} />
       </mesh>
     </group>
   );

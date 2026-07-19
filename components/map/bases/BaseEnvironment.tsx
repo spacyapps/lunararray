@@ -1,10 +1,9 @@
 "use client";
 
-// Shared local-scene environment: regolith ground disc, scattered rocks,
-// horizon haze, and the Earth hanging in the sky (we're on the near side —
-// it never moves). Each base scene sits on top of this at the origin.
+// Photoreal local-scene environment: tiled lunar regolith, detailed rocks,
+// horizon haze, and a lit Earth disc in the sky (near-side bases).
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import * as THREE from "three";
 
 function seedRand(i: number): number {
@@ -12,27 +11,65 @@ function seedRand(i: number): number {
   return x - Math.floor(x);
 }
 
-function Rocks({ seed = 1, tint = "#6a6e7a" }: { seed?: number; tint?: string }) {
+function useMapTexture(url: string, repeat = 8) {
+  const [tex, setTex] = useState<THREE.Texture | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    new THREE.TextureLoader().load(url, (t) => {
+      if (cancelled) return;
+      t.colorSpace = THREE.SRGBColorSpace;
+      t.wrapS = t.wrapT = THREE.RepeatWrapping;
+      t.repeat.set(repeat, repeat);
+      t.anisotropy = 8;
+      setTex(t);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [url, repeat]);
+  return tex;
+}
+
+function Rocks({ seed = 1, tint = "#6a6e7a", map }: { seed?: number; tint?: string; map?: THREE.Texture | null }) {
   const rocks = useMemo(() => {
-    const list: { pos: [number, number, number]; s: number; rot: number }[] = [];
-    for (let i = 0; i < 90; i++) {
+    const list: { pos: [number, number, number]; s: [number, number, number]; rot: [number, number, number] }[] = [];
+    for (let i = 0; i < 120; i++) {
       const a = seedRand(seed * 100 + i * 3) * Math.PI * 2;
-      const r = 14 + seedRand(seed * 100 + i * 3 + 1) * 66;
-      const s = 0.12 + seedRand(seed * 100 + i * 3 + 2) ** 2 * 1.1;
+      const r = 14 + seedRand(seed * 100 + i * 3 + 1) * 70;
+      const s0 = 0.15 + seedRand(seed * 100 + i * 3 + 2) ** 2 * 1.35;
       list.push({
-        pos: [Math.cos(a) * r, s * 0.35, Math.sin(a) * r],
-        s,
-        rot: seedRand(seed * 100 + i * 7) * Math.PI,
+        pos: [Math.cos(a) * r, s0 * 0.28, Math.sin(a) * r],
+        s: [s0, s0 * (0.55 + seedRand(i * 5) * 0.55), s0 * (0.7 + seedRand(i * 7) * 0.5)],
+        rot: [
+          seedRand(seed * 100 + i * 7) * Math.PI,
+          seedRand(seed * 100 + i * 11) * Math.PI,
+          seedRand(seed * 100 + i * 13) * Math.PI,
+        ],
       });
     }
     return list;
   }, [seed]);
+
   return (
     <group>
       {rocks.map((rk, i) => (
-        <mesh key={i} position={rk.pos} rotation={[rk.rot, rk.rot * 2.3, 0]} scale={rk.s}>
-          <icosahedronGeometry args={[1, 0]} />
-          <meshStandardMaterial color={tint} roughness={1} flatShading />
+        <mesh
+          key={i}
+          position={rk.pos}
+          rotation={rk.rot}
+          scale={rk.s}
+          castShadow
+          receiveShadow
+        >
+          <dodecahedronGeometry args={[1, 1]} />
+          <meshStandardMaterial
+            color={tint}
+            map={map ?? undefined}
+            roughness={0.95}
+            metalness={0.02}
+            bumpMap={map ?? undefined}
+            bumpScale={0.08}
+          />
         </mesh>
       ))}
     </group>
@@ -41,47 +78,110 @@ function Rocks({ seed = 1, tint = "#6a6e7a" }: { seed?: number; tint?: string })
 
 function Earth() {
   return (
-    <group position={[-38, 46, -78]}>
+    <group position={[-42, 52, -88]}>
       <mesh>
-        <sphereGeometry args={[6, 48, 48]} />
-        <meshStandardMaterial color="#3d6fd6" roughness={0.6} />
+        <sphereGeometry args={[7.5, 64, 64]} />
+        <meshStandardMaterial
+          color="#2f6ad4"
+          roughness={0.55}
+          metalness={0.05}
+          emissive="#0a2040"
+          emissiveIntensity={0.15}
+        />
       </mesh>
-      {/* crude cloud/land mottling */}
-      <mesh scale={1.002}>
-        <sphereGeometry args={[6, 32, 32]} />
-        <meshStandardMaterial color="#e8f2ff" transparent opacity={0.28} roughness={1} />
+      {/* land / cloud mottling layers */}
+      <mesh scale={1.003}>
+        <sphereGeometry args={[7.5, 48, 48]} />
+        <meshStandardMaterial
+          color="#3d8a4a"
+          transparent
+          opacity={0.35}
+          roughness={1}
+          depthWrite={false}
+        />
       </mesh>
-      {/* atmosphere glow */}
-      <mesh scale={1.12}>
-        <sphereGeometry args={[6, 32, 32]} />
-        <meshBasicMaterial color="#7db4ff" transparent opacity={0.12} side={THREE.BackSide} />
+      <mesh scale={1.006}>
+        <sphereGeometry args={[7.5, 48, 48]} />
+        <meshStandardMaterial
+          color="#f0f6ff"
+          transparent
+          opacity={0.22}
+          roughness={1}
+          depthWrite={false}
+        />
       </mesh>
+      {/* atmosphere rim */}
+      <mesh scale={1.14}>
+        <sphereGeometry args={[7.5, 48, 48]} />
+        <meshBasicMaterial color="#7db4ff" transparent opacity={0.14} side={THREE.BackSide} depthWrite={false} />
+      </mesh>
+      <mesh scale={1.22}>
+        <sphereGeometry args={[7.5, 32, 32]} />
+        <meshBasicMaterial color="#a8d4ff" transparent opacity={0.06} side={THREE.BackSide} depthWrite={false} />
+      </mesh>
+      <pointLight position={[0, 0, 0]} intensity={8} color="#8ab4ff" distance={40} />
     </group>
   );
 }
 
 export default function BaseEnvironment({
-  groundColor = "#7c8090",
-  rockTint = "#6a6e7a",
+  groundColor = "#9a9588",
+  rockTint = "#7a766c",
   seed = 1,
+  regolithMap = "/textures/lunar-regolith.jpg",
 }: {
   groundColor?: string;
   rockTint?: string;
   seed?: number;
+  regolithMap?: string;
 }) {
+  const regolith = useMapTexture(regolithMap, 14);
+  // Darker variant for far terrain
+  const farTex = useMapTexture(regolithMap, 6);
+
   return (
     <group>
-      {/* regolith ground */}
+      {/* near pad — high-res tiled regolith */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-        <circleGeometry args={[120, 72]} />
-        <meshStandardMaterial color={groundColor} roughness={1} />
+        <circleGeometry args={[55, 96]} />
+        <meshStandardMaterial
+          color={groundColor}
+          map={regolith ?? undefined}
+          bumpMap={regolith ?? undefined}
+          bumpScale={0.12}
+          roughness={0.98}
+          metalness={0.02}
+        />
       </mesh>
-      {/* horizon haze ring — cheap depth cue at the disc edge */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.05, 0]}>
-        <ringGeometry args={[95, 120, 72]} />
-        <meshBasicMaterial color="#05060a" transparent opacity={0.9} side={THREE.DoubleSide} />
+      {/* mid ring */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.02, 0]} receiveShadow>
+        <ringGeometry args={[54, 95, 96]} />
+        <meshStandardMaterial
+          color={groundColor}
+          map={farTex ?? undefined}
+          bumpMap={farTex ?? undefined}
+          bumpScale={0.1}
+          roughness={1}
+          metalness={0.02}
+        />
       </mesh>
-      <Rocks seed={seed} tint={rockTint} />
+      {/* outer fade to space */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.04, 0]}>
+        <ringGeometry args={[94, 140, 96]} />
+        <meshStandardMaterial
+          color="#2a2c34"
+          roughness={1}
+          metalness={0}
+          transparent
+          opacity={0.95}
+        />
+      </mesh>
+      {/* horizon haze */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.06, 0]}>
+        <ringGeometry args={[100, 140, 96]} />
+        <meshBasicMaterial color="#05060a" transparent opacity={0.85} side={THREE.DoubleSide} depthWrite={false} />
+      </mesh>
+      <Rocks seed={seed} tint={rockTint} map={regolith} />
       <Earth />
     </group>
   );

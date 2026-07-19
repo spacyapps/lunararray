@@ -23,7 +23,7 @@ function Pod({
     <group {...props}>
       <mesh scale={[1.35, 0.72, 1]} position={[0, r * 0.18, 0]}>
         <sphereGeometry args={[r, 40, 24]} />
-        <meshToonMaterial color={HULL} />
+        <meshStandardMaterial color={HULL} />
       </mesh>
       {/* mint seam ring around the belly */}
       <mesh position={[0, r * 0.22, 0]} rotation={[Math.PI / 2, 0, 0]} scale={[1.35, 1, 1]}>
@@ -57,11 +57,11 @@ function Gantry() {
       {/* flattened arch — half torus scaled down in Y */}
       <mesh scale={[1, 0.62, 1]}>
         <torusGeometry args={[24, 0.55, 10, 48, Math.PI]} />
-        <meshToonMaterial color="#9aa0b4" />
+        <meshStandardMaterial color="#9aa0b4" />
       </mesh>
       <mesh ref={car}>
         <boxGeometry args={[1.6, 1.2, 1.6]} />
-        <meshToonMaterial color={ACCENT} emissive={ACCENT} emissiveIntensity={0.5} />
+        <meshStandardMaterial color={ACCENT} emissive={ACCENT} emissiveIntensity={0.5} />
       </mesh>
     </group>
   );
@@ -106,7 +106,7 @@ export default function LA04() {
             rotation={[Math.PI / 2, 0, seedRand(i) * Math.PI]}
           >
             <capsuleGeometry args={[0.5, 1.8, 6, 12]} />
-            <meshToonMaterial color={i % 3 ? HULL : ACCENT} />
+            <meshStandardMaterial color={i % 3 ? HULL : ACCENT} />
           </mesh>
         );
       })}

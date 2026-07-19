@@ -81,16 +81,17 @@ export default function CameraDirector({
   onReturned,
   onApproachSettled,
   onInteriorSettled,
+  /** True once dive/approach/enter/exit handoff finishes — OrbitControls may drive. */
+  onExploreReady,
   fadeRef,
   deepLink = false,
 }: {
   view: View;
   onArrived: () => void;
   onReturned: () => void;
-  /** After approach transition lands — parent keeps mode as "approach". */
   onApproachSettled?: () => void;
-  /** After enter/exit interior transition lands. */
   onInteriorSettled?: (mode: "interior" | "base") => void;
+  onExploreReady?: (ready: boolean) => void;
   fadeRef: React.RefObject<HTMLDivElement | null>;
   deepLink?: boolean;
 }) {
@@ -126,11 +127,13 @@ export default function CameraDirector({
       baseT0.current = null;
       approachT0.current = null;
       interiorT0.current = null;
+      onExploreReady?.(false);
       if (pCam.fov !== MAP_FOV) applyFov(pCam, MAP_FOV);
       return;
     }
 
     if (view.mode === "dive") {
+      onExploreReady?.(false);
       const key = `dive-${view.id}`;
       const holdThisDive = deepLink && !deepLinkConsumed.current;
       if (anim.current?.key !== key) {
@@ -209,25 +212,54 @@ export default function CameraDirector({
         if (t >= 1 && !a.fired) {
           a.fired = true;
           anim.current = null;
+          baseT0.current = now;
           onInteriorSettled?.("base");
+          onExploreReady?.(true);
         }
         return;
       }
 
-      anim.current = null;
       approachT0.current = null;
       interiorT0.current = null;
       const spec: OrbitSpec = ORBITS[view.id] ?? DEFAULT_ORBIT;
-      if (baseT0.current === null) baseT0.current = now;
-      const t = now - baseT0.current + phaseOffset.current;
-      // Only run the arrival fade-in on the first beats after a dive.
+      // Initial settle after dive / exit: place camera once, then hand off to OrbitControls.
+      if (baseT0.current === null) {
+        baseT0.current = now;
+        onExploreReady?.(false);
+        const pose = orbitPose(spec, phaseOffset.current);
+        camera.position.copy(pose.pos);
+        camera.lookAt(0, pose.focusY, 0);
+        focus.current.set(0, pose.focusY, 0);
+        if (pCam.fov !== MAP_FOV) applyFov(pCam, MAP_FOV);
+      }
       const sinceBase = now - baseT0.current;
-      if (sinceBase < 1) setFade(1 - sinceBase / 0.9);
-      else setFade(0);
-      const pose = orbitPose(spec, t);
-      camera.position.copy(pose.pos);
-      camera.lookAt(0, pose.focusY, 0);
-      if (pCam.fov !== MAP_FOV) applyFov(pCam, MAP_FOV);
+      if (sinceBase < 1) {
+        setFade(1 - sinceBase / 0.9);
+        // Gentle auto-orbit only during the fade-in settle
+        if (sinceBase < 0.85 && anim.current?.key !== `exit-interior-${view.id}`) {
+          const pose = orbitPose(spec, sinceBase + phaseOffset.current);
+          camera.position.copy(pose.pos);
+          camera.lookAt(0, pose.focusY, 0);
+        }
+      } else {
+        setFade(0);
+        if (!anim.current?.fired) {
+          if (!anim.current) {
+            anim.current = {
+              key: `base-ready-${view.id}`,
+              t0: now,
+              fromPos: camera.position.clone(),
+              fromFocus: focus.current.clone(),
+              fromFov: pCam.fov,
+              held: false,
+              fired: true,
+            };
+          } else {
+            anim.current.fired = true;
+          }
+          onExploreReady?.(true);
+        }
+      }
       return;
     }
 
@@ -235,7 +267,7 @@ export default function CameraDirector({
       const spec: ApproachSpec = APPROACHES[view.id] ?? DEFAULT_APPROACH;
       const key = `approach-${view.id}`;
       if (anim.current?.key !== key) {
-        // Capture current phase from base orbit so we continue smoothly.
+        onExploreReady?.(false);
         if (baseT0.current !== null) {
           phaseOffset.current = now - baseT0.current + phaseOffset.current;
         }
@@ -244,27 +276,31 @@ export default function CameraDirector({
           key,
           t0: now,
           fromPos: camera.position.clone(),
-          fromFocus: focus.current.clone().set(0, (ORBITS[view.id] ?? DEFAULT_ORBIT).focusHeight, 0),
+          fromFocus: focus.current.clone().lengthSq() > 0
+            ? focus.current.clone()
+            : new THREE.Vector3(0, (ORBITS[view.id] ?? DEFAULT_ORBIT).focusHeight, 0),
           fromFov: pCam.fov,
           held: false,
         };
         approachT0.current = now;
       }
       const a = anim.current;
-      const orbitT = now - (approachT0.current ?? now) + phaseOffset.current;
-      const targetPose = orbitPose(spec, orbitT);
+      const targetPose = orbitPose(spec, phaseOffset.current);
       const t = Math.min(1, (now - a.t0) / APPROACH_DUR);
       const e = easeInOut(t);
       if (t < 1) {
         camera.position.lerpVectors(a.fromPos, targetPose.pos, e);
         focus.current.lerpVectors(a.fromFocus, new THREE.Vector3(0, targetPose.focusY, 0), e);
         camera.lookAt(focus.current);
+        onExploreReady?.(false);
       } else {
         camera.position.copy(targetPose.pos);
         camera.lookAt(0, targetPose.focusY, 0);
+        focus.current.set(0, targetPose.focusY, 0);
         if (!a.fired) {
           a.fired = true;
           onApproachSettled?.();
+          onExploreReady?.(true);
         }
       }
       setFade(0);
@@ -275,6 +311,7 @@ export default function CameraDirector({
       const ispec: InteriorSpec = INTERIORS[view.id] ?? DEFAULT_INTERIOR;
       const key = `enter-interior-${view.id}`;
       if (anim.current?.key !== key) {
+        onExploreReady?.(false);
         anim.current = {
           key,
           t0: now,
@@ -287,33 +324,33 @@ export default function CameraDirector({
         setFade(1);
       }
       const a = anim.current;
-      const roomT = now - (interiorT0.current ?? now);
-      const target = interiorPose(ispec, roomT);
+      const target = interiorPose(ispec, 0);
       const t = Math.min(1, (now - a.t0) / ENTER_DUR);
       const e = easeInOut(t);
       if (t < 1) {
-        // Hold black mid-enter so the exterior unmount / interior mount isn't visible.
         camera.position.lerpVectors(a.fromPos, target.pos, e);
         focus.current.lerpVectors(a.fromFocus, target.focus, e);
         camera.lookAt(focus.current);
         applyFov(pCam, THREE.MathUtils.lerp(a.fromFov, ispec.fov, e));
-        // Fade: full black until mid, then reveal interior.
         if (t < 0.45) setFade(1);
         else setFade(1 - (t - 0.45) / 0.55);
       } else {
         camera.position.copy(target.pos);
         camera.lookAt(target.focus);
+        focus.current.copy(target.focus);
         applyFov(pCam, ispec.fov);
         setFade(0);
         if (!a.fired) {
           a.fired = true;
           onInteriorSettled?.("interior");
+          onExploreReady?.(true);
         }
       }
       return;
     }
 
     if (view.mode === "rise") {
+      onExploreReady?.(false);
       const key = `rise-${view.id}`;
       if (anim.current?.key !== key) {
         baseT0.current = null;

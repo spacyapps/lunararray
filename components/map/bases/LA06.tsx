@@ -23,7 +23,7 @@ function UnfinishedShell() {
       {/* skinned portion — 60% of the lens */}
       <mesh scale={[1, 0.5, 1]}>
         <sphereGeometry args={[13, 48, 24, 0, Math.PI * 1.2, 0, Math.PI / 2]} />
-        <meshToonMaterial color={SAND} side={THREE.DoubleSide} />
+        <meshStandardMaterial color={SAND} side={THREE.DoubleSide} />
       </mesh>
       {/* exposed ribs across the open wedge */}
       {[0.1, 0.28, 0.46, 0.64, 0.82].map((f, i) => {
@@ -32,7 +32,7 @@ function UnfinishedShell() {
           <group key={i} rotation={[0, -a, 0]}>
             <mesh scale={[1, 0.5, 1]} rotation={[0, 0, 0]}>
               <torusGeometry args={[12.9, 0.16, 6, 40, Math.PI / 2]} />
-              <meshToonMaterial color={FRAME} />
+              <meshStandardMaterial color={FRAME} />
             </mesh>
           </group>
         );
@@ -40,7 +40,7 @@ function UnfinishedShell() {
       {/* ring beam at the rim */}
       <mesh rotation={[Math.PI / 2, 0, 0]}>
         <torusGeometry args={[13, 0.3, 8, 64]} />
-        <meshToonMaterial color={CONCRETE} />
+        <meshStandardMaterial color={CONCRETE} />
       </mesh>
       {/* interior work glow spilling out of the open wedge */}
       <pointLight position={[-6, 3.5, -6]} intensity={70} color={AMBER} distance={30} />
@@ -150,7 +150,7 @@ export default function LA06() {
           rotation={[0, 0, Math.PI / 2]}
         >
           <cylinderGeometry args={[0.7, 0.7, 7, 14]} />
-          <meshToonMaterial color={i % 2 ? "#9aa0b4" : CONCRETE} />
+          <meshStandardMaterial color={i % 2 ? "#9aa0b4" : CONCRETE} />
         </mesh>
       ))}
 

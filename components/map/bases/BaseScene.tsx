@@ -16,13 +16,14 @@ import LA06 from "./LA06";
 import LA07 from "./LA07";
 import LA08 from "./LA08";
 import ResidentialInterior from "./interiors/ResidentialInterior";
+import BaseLighting, { RendererQuality } from "./BaseLighting";
 import { canEnter } from "../view";
 
 function PlaceholderBase({ station }: { station: Station }) {
   return (
     <group>
-      <directionalLight position={[-30, 24, 18]} intensity={2} color="#fff4e0" />
-      <directionalLight position={[40, 8, -30]} intensity={0.8} color="#5cd6ff" />
+      <RendererQuality shadows />
+      <BaseLighting keyIntensity={2.8} />
       <BaseEnvironment seed={station.angle ?? 9} />
       <mesh position={[0, 2.2, 0]}>
         <cylinderGeometry args={[0.12, 0.3, 4.4, 8]} />
@@ -56,26 +57,45 @@ export default function BaseScene({
     if (station.id === "LA-08") return <ResidentialInterior />;
   }
 
-  switch (station.id) {
-    case "LA-00":
-      return <LA00 />;
-    case "LA-01":
-      return <LA01 />;
-    case "LA-02":
-      return <LA02 />;
-    case "LA-03":
-      return <LA03 />;
-    case "LA-04":
-      return <LA04 />;
-    case "LA-05":
-      return <LA05 />;
-    case "LA-06":
-      return <LA06 />;
-    case "LA-07":
-      return <LA07 />;
-    case "LA-08":
-      return <LA08 />;
-    default:
-      return <PlaceholderBase station={station} />;
-  }
+  // LA-08 owns its full lighting kit; others get shared PBR key + soft shadows
+  // layered under their scene-specific practicals.
+  const body = (() => {
+    switch (station.id) {
+      case "LA-00":
+        return <LA00 />;
+      case "LA-01":
+        return <LA01 />;
+      case "LA-02":
+        return <LA02 />;
+      case "LA-03":
+        return <LA03 />;
+      case "LA-04":
+        return <LA04 />;
+      case "LA-05":
+        return <LA05 />;
+      case "LA-06":
+        return <LA06 />;
+      case "LA-07":
+        return <LA07 />;
+      case "LA-08":
+        return <LA08 />;
+      default:
+        return <PlaceholderBase station={station} />;
+    }
+  })();
+
+  if (station.id === "LA-08") return body;
+
+  return (
+    <group>
+      <RendererQuality shadows />
+      <BaseLighting
+        keyIntensity={station.tone === "military" ? 3.6 : 3.1}
+        keyColor={station.tone === "military" ? "#e8f0ff" : "#fff1dc"}
+        fillIntensity={station.tone === "military" ? 0.55 : 1.1}
+        godRays={station.tone !== "military"}
+      />
+      {body}
+    </group>
+  );
 }

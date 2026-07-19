@@ -15,8 +15,11 @@ import Hotspots from "./Hotspots";
 import Starfield3D from "./Starfield3D";
 import CameraDirector from "./CameraDirector";
 import BaseScene from "./bases/BaseScene";
+import { RendererQuality } from "./bases/BaseLighting";
 import { View, EMBED_CAM_POS, EMBED_FOV, MAP_CAM_POS, MAP_FOV, canEnter } from "./view";
 import { STATIONS } from "@/lib/stations";
+import { APPROACHES, INTERIORS, ORBITS } from "./bases/orbits";
+import { DEFAULT_APPROACH, DEFAULT_INTERIOR, DEFAULT_ORBIT } from "./view";
 
 const mono: React.CSSProperties = {
   fontFamily: "var(--mono)",
@@ -43,6 +46,7 @@ export default function MapScene() {
     isDeepLink ? { mode: "dive", id: requestedStation! } : { mode: "map" },
   );
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [exploreReady, setExploreReady] = useState(false);
   const fadeRef = useRef<HTMLDivElement>(null);
 
   const activeId = view.mode === "map" ? null : view.id;
@@ -67,6 +71,7 @@ export default function MapScene() {
   }, []);
 
   const approachBase = useCallback(() => {
+    setExploreReady(false);
     setView((v) => {
       if (v.mode === "base") return { mode: "approach", id: v.id };
       if (v.mode === "approach") return { mode: "base", id: v.id };
@@ -112,20 +117,28 @@ export default function MapScene() {
 
   const statusLine = (() => {
     if (onMap) return "9 nodes · Near side · Octogram";
-    if (view.mode === "interior") return "Residence · Esc to exit";
-    if (view.mode === "approach") return "Close approach · A pull back · Esc array";
-    if (view.mode === "base") return "Station orbit · A approach · Esc array";
+    if (view.mode === "interior") return "Residence · drag to look · Esc exit";
+    if (view.mode === "approach") return "Close approach · drag explore · A / Esc";
+    if (view.mode === "base") return "Explore · drag orbit · scroll zoom · A / Esc";
     return "On approach";
   })();
+
+  const orbitSpec = activeId ? ORBITS[activeId] ?? DEFAULT_ORBIT : DEFAULT_ORBIT;
+  const approachSpec = activeId ? APPROACHES[activeId] ?? DEFAULT_APPROACH : DEFAULT_APPROACH;
+  const interiorSpec = activeId ? INTERIORS[activeId] ?? DEFAULT_INTERIOR : DEFAULT_INTERIOR;
+  const exploreExterior = exploreReady && (view.mode === "base" || view.mode === "approach");
+  const exploreInterior = exploreReady && view.mode === "interior";
 
   return (
     <>
       <Canvas
+        shadows
         camera={{ position: isDeepLink ? EMBED_CAM_POS : MAP_CAM_POS, fov: isDeepLink ? EMBED_FOV : MAP_FOV }}
-        gl={{ antialias: true, powerPreference: "high-performance" }}
-        dpr={[1, 1.75]}
+        gl={{ antialias: true, powerPreference: "high-performance", logarithmicDepthBuffer: true }}
+        dpr={[1, 2]}
         style={{ position: "absolute", inset: 0 }}
       >
+        <RendererQuality shadows />
         <color attach="background" args={["#05060a"]} />
         <ambientLight intensity={showInterior ? 0 : 0.18} />
         {!showInterior && <Starfield3D />}
@@ -140,6 +153,7 @@ export default function MapScene() {
             onSelect={(id) => {
               if (onMap) {
                 setHoveredId(null);
+                setExploreReady(false);
                 setView({ mode: "dive", id });
               }
             }}
@@ -163,7 +177,11 @@ export default function MapScene() {
           fadeRef={fadeRef}
           deepLink={isDeepLink}
           onArrived={() => setView((v) => (v.mode === "dive" ? { mode: "base", id: v.id } : v))}
-          onReturned={() => setView({ mode: "map" })}
+          onReturned={() => {
+            setExploreReady(false);
+            setView({ mode: "map" });
+          }}
+          onExploreReady={setExploreReady}
         />
         {onMap && (
           <OrbitControls
@@ -177,6 +195,40 @@ export default function MapScene() {
             maxAzimuthAngle={Math.PI * 0.18}
             minPolarAngle={Math.PI * 0.36}
             maxPolarAngle={Math.PI * 0.53}
+          />
+        )}
+        {exploreExterior && (
+          <OrbitControls
+            makeDefault
+            enablePan={false}
+            enableDamping
+            dampingFactor={0.055}
+            rotateSpeed={0.42}
+            zoomSpeed={0.7}
+            minDistance={view.mode === "approach" ? approachSpec.radius * 0.55 : orbitSpec.radius * 0.45}
+            maxDistance={view.mode === "approach" ? approachSpec.radius * 1.45 : orbitSpec.radius * 1.55}
+            minPolarAngle={0.18}
+            maxPolarAngle={Math.PI * 0.48}
+            target={[0, view.mode === "approach" ? approachSpec.focusHeight : orbitSpec.focusHeight, 0]}
+            autoRotate
+            autoRotateSpeed={0.28}
+          />
+        )}
+        {exploreInterior && (
+          <OrbitControls
+            makeDefault
+            enablePan={false}
+            enableDamping
+            dampingFactor={0.06}
+            rotateSpeed={0.45}
+            zoomSpeed={0.55}
+            minDistance={1.4}
+            maxDistance={4.2}
+            minPolarAngle={0.55}
+            maxPolarAngle={Math.PI * 0.58}
+            target={interiorSpec.focus}
+            autoRotate
+            autoRotateSpeed={0.18}
           />
         )}
       </Canvas>

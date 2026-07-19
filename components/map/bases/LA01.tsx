@@ -46,7 +46,7 @@ function Pylons({ pts }: { pts: [number, number, number][] }) {
       {spots.map((s, i) => (
         <mesh key={i} position={[s.pos.x, s.pos.y / 2 - 0.3, s.pos.z]}>
           <cylinderGeometry args={[0.14, 0.4, s.pos.y - 0.6, 8]} />
-          <meshToonMaterial color="#9aa0b4" />
+          <meshStandardMaterial color="#9aa0b4" />
         </mesh>
       ))}
     </group>
@@ -74,7 +74,7 @@ function Train({ pts, period, offset }: { pts: [number, number, number][]; perio
         <group key={i}>
           <mesh rotation={[Math.PI / 2, 0, 0]}>
             <capsuleGeometry args={[0.55, 2.6, 8, 16]} />
-            <meshToonMaterial color={i === 0 ? ACCENT : HULL} />
+            <meshStandardMaterial color={i === 0 ? ACCENT : HULL} />
           </mesh>
           {/* lit window strip */}
           <mesh position={[0, 0.1, 0]} rotation={[Math.PI / 2, 0, 0]}>
@@ -92,7 +92,7 @@ function GateArch(props: { position: [number, number, number]; rotation?: [numbe
     <group {...props}>
       <mesh rotation={[0, 0, 0]}>
         <torusGeometry args={[7, 0.35, 10, 40, Math.PI]} />
-        <meshToonMaterial color={HULL} emissive={ACCENT} emissiveIntensity={0.5} />
+        <meshStandardMaterial color={HULL} emissive={ACCENT} emissiveIntensity={0.5} />
       </mesh>
       <Beacon color={ACCENT} size={0.22} position={[0, 7.4, 0]} />
     </group>
@@ -147,11 +147,11 @@ export default function LA01() {
       <group position={[6, 0, -12]} rotation={[0, 0, 0.05]}>
         <mesh position={[0, 5.5, 0]}>
           <cylinderGeometry args={[0.16, 0.5, 11, 10]} />
-          <meshToonMaterial color={HULL} />
+          <meshStandardMaterial color={HULL} />
         </mesh>
         <mesh position={[0, 11.2, 0]} scale={[1, 0.5, 1]}>
           <sphereGeometry args={[1.5, 24, 16]} />
-          <meshToonMaterial color={HULL} emissive={ACCENT} emissiveIntensity={0.6} />
+          <meshStandardMaterial color={HULL} emissive={ACCENT} emissiveIntensity={0.6} />
         </mesh>
         <Beacon color={ACCENT} size={0.2} position={[0, 12.4, 0]} speed={2.4} />
       </group>
