@@ -62,7 +62,7 @@ lunararray/                          # existing Next.js app
 | 5 | Assets (copy from public/textures) | **done** | assets/textures/* |
 | 6 | Web export pipeline | **done** | export_presets.cfg + export_web.sh |
 | 7 | Next.js embed | **done** | GodotMapEmbed + MapRoot auto-switch |
-| 8 | Install Godot / first HTML5 build | **pending** | Needs `brew install --cask godot` |
+| 8 | Install Godot / first HTML5 build | **done** | Godot 4.7.1 + templates; export in public/godot/ |
 | 9 | Polish + document | **done** | godot/lunararray_map/README.md |
 
 ## Godot requirement
@@ -118,10 +118,13 @@ Plan written; architecture is Next shell + Godot HTML5 embed + `godot/lunararray
 ### Phase 1–7 (scaffold + embed)
 Godot project under `godot/lunararray_map/` with main map, LA-00 (hatch MMDD), LA-08 (pods/domes/portal), residential interior, camera FSM, texture assets, Web export preset, and Next.js embed (`GodotMapEmbed` + auto fallback to Three.js).
 
-### Phase 8 (your machine)
+### Phase 8 — export succeeded (Godot 4.7.1)
+- Installed cask `godot` 4.7.1
+- Downloaded export templates into `~/Library/Application Support/Godot/export_templates/4.7.1.stable/`
+- `./godot/lunararray_map/scripts/export_web.sh` → `public/godot/index.html` (+ `.wasm` ~38MB, `.pck` ~12MB)
+- Next `/map` auto-selects Godot when that file is present
+
 ```bash
-brew install --cask godot
-# open godot/lunararray_map once → install Web export templates
-./godot/lunararray_map/scripts/export_web.sh
-npm run dev   # /map uses Godot when public/godot/index.html exists
+npm run dev
+# open /map (after access unlock)
 ```
