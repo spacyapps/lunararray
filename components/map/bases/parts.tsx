@@ -242,7 +242,37 @@ function buildResidentialTextures(
   return { map, emissive };
 }
 
-/** Teardrop hull of `height` along +Y: round belly, tapering to a point. */
+/**
+ * Radial profile for teardrop lathes.
+ * - "sharp": classic needle tip (spires, military)
+ * - "soft": fat belly, blunt rounded tip (residential glass drops)
+ */
+export function teardropProfileRadius(
+  u: number,
+  radius: number,
+  tip: "sharp" | "soft" = "sharp",
+): number {
+  const t = Math.min(1, Math.max(0, u));
+  if (tip === "sharp") {
+    return Math.max(0.0001, radius * Math.sin(Math.PI * Math.pow(t, 0.62)) * (1 - t * 0.12));
+  }
+  // Soft drop: fuller midsection, tip rounds off instead of spiking
+  const body = Math.sin(Math.PI * Math.pow(t, 0.78));
+  // Stay wide longer, then ease to a small rounded tip
+  const envelope = Math.pow(1 - Math.pow(t, 2.4), 0.62);
+  let r = radius * body * (0.92 + 0.08 * (1 - t)) * envelope;
+  if (t > 0.72) {
+    const s = (t - 0.72) / 0.28;
+    // Hemisphere-ish cap so the top reads soft, not pointed
+    const cap = Math.sqrt(Math.max(0, 1 - s * s));
+    const tipR = radius * 0.2 * cap;
+    r = Math.max(tipR, r * (1 - s * 0.55));
+  }
+  if (t >= 0.995) r = 0.0001;
+  return Math.max(0.0001, r);
+}
+
+/** Teardrop hull of `height` along +Y. Soft tip for residential glass towers. */
 export function Teardrop({
   height = 8,
   radius = 3,
@@ -252,6 +282,8 @@ export function Teardrop({
   seed,
   imageMap,
   variant = "hull",
+  /** "soft" = blunt rounded tip (default for residential). */
+  tip = "auto",
   ...props
 }: {
   height?: number;
@@ -268,23 +300,31 @@ export function Teardrop({
    *  lit warm, some cool, some dark) with real emissive glow, roofline eave
    *  clusters, and periodic patio bands — for city/residential towers. */
   variant?: "hull" | "residential";
+  tip?: "auto" | "sharp" | "soft";
 } & ThreeElements["group"]) {
-  // Profile 28 / radial 40 — reads smooth at orbit distances without 96-seg cost.
+  const isResidential = variant === "residential";
+  const tipMode: "sharp" | "soft" =
+    tip === "auto" ? (isResidential ? "soft" : "sharp") : tip;
+
+  // Profile 36 / radial 48 for soft glass drops; sharp stays lighter.
   const geometry = useMemo(() => {
     const pts: THREE.Vector2[] = [];
-    const N = 28;
+    const N = tipMode === "soft" ? 36 : 28;
+    const segs = tipMode === "soft" ? 48 : 40;
     for (let i = 0; i <= N; i++) {
       const u = i / N;
-      const r = radius * Math.sin(Math.PI * Math.pow(u, 0.62)) * (1 - u * 0.12);
-      pts.push(new THREE.Vector2(Math.max(0.0001, r), u * height));
+      const r = teardropProfileRadius(u, radius, tipMode);
+      pts.push(new THREE.Vector2(r, u * height));
     }
     pts.push(new THREE.Vector2(0.0001, height));
-    return new THREE.LatheGeometry(pts, 40);
-  }, [height, radius]);
+    return new THREE.LatheGeometry(pts, segs);
+  }, [height, radius, tipMode]);
 
   const hullSeed = seed ?? Math.round(height * 37 + radius * 131);
-  const isResidential = variant === "residential";
-  const resolvedImageMap = imageMap ?? (isResidential ? undefined : "/textures/hull-panel.jpg");
+  // Residential defaults to flowing glass facade texture (hero exception).
+  const resolvedImageMap =
+    imageMap ??
+    (isResidential ? "/textures/drop-glass-facade.jpg" : "/textures/hull-panel.jpg");
   const residentialCanvases = useMemo(() => {
     if (!isResidential) return null;
     return buildResidentialTextures(height, hullSeed);
@@ -312,6 +352,8 @@ export function Teardrop({
       if (cancelled) return;
       tex.colorSpace = THREE.SRGBColorSpace;
       tex.anisotropy = 4;
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.ClampToEdgeWrapping;
       setImageTexture(tex);
     });
     return () => {
@@ -320,26 +362,252 @@ export function Teardrop({
   }, [resolvedImageMap]);
 
   const texture = imageTexture ?? proceduralMap;
-  const glowing = isResidential && !imageTexture;
+  const glowing = isResidential;
+  // Glass-like residential: translucent sheen, warm interior read via emissive
+  const glassy = isResidential && !!imageTexture;
 
   return (
     <group {...props}>
-      {/* Cast only — ground receives; avoid double shadow cost */}
       <mesh geometry={geometry} castShadow>
         <meshStandardMaterial
           color={color}
           map={texture}
           bumpMap={texture}
-          bumpScale={glowing ? 0.035 : 0.05}
-          roughness={glowing ? 0.42 : 0.38}
-          metalness={glowing ? 0.22 : 0.45}
-          emissiveMap={glowing ? proceduralEmissiveMap : undefined}
-          emissive={glowing ? "#ffffff" : emissive ?? "#000000"}
-          emissiveIntensity={glowing ? 1.05 : emissive ? emissiveIntensity : 0}
+          bumpScale={glassy ? 0.06 : glowing ? 0.035 : 0.05}
+          roughness={glassy ? 0.28 : glowing ? 0.42 : 0.38}
+          metalness={glassy ? 0.12 : glowing ? 0.22 : 0.45}
+          emissiveMap={glowing && !imageTexture ? proceduralEmissiveMap ?? undefined : undefined}
+          emissive={
+            glassy
+              ? "#ffe8c8"
+              : glowing
+                ? "#ffffff"
+                : (emissive ?? "#000000")
+          }
+          emissiveIntensity={glassy ? 0.35 : glowing ? 1.05 : emissive ? emissiveIntensity : 0}
+          transparent={glassy}
+          opacity={glassy ? 0.92 : 1}
+          envMapIntensity={glassy ? 1.1 : 0.6}
         />
+      </mesh>
+      {/* Soft inner glow for glass drops — warm rooms through the facade */}
+      {glassy && (
+        <mesh geometry={geometry} scale={[0.92, 0.98, 0.92]}>
+          <meshBasicMaterial
+            color="#ffd9a0"
+            transparent
+            opacity={0.12}
+            depthWrite={false}
+            side={THREE.BackSide}
+          />
+        </mesh>
+      )}
+    </group>
+  );
+}
+
+/**
+ * Tapered residential tower:
+ *  - INNER: horizontal glowing floor slices (lit levels)
+ *  - OUTER: vertical glass pillars around the perimeter
+ * Matches fluted frosted-glass towers with warm interiors.
+ */
+export function GlassTaperTower({
+  height = 12,
+  /** Base radius (bottom). */
+  radius = 2.5,
+  /** Top radius as a fraction of base — mild taper. */
+  topScale = 0.78,
+  color = "#e8f2fa",
+  seed = 1,
+  ...props
+}: {
+  height?: number;
+  radius?: number;
+  topScale?: number;
+  color?: string;
+  /** @deprecated unused — pillars are geometric now */
+  imageMap?: string;
+  seed?: number;
+} & ThreeElements["group"]) {
+  const rTop = radius * topScale;
+  const rBot = radius;
+  const lean = Math.atan2(rBot - rTop, height);
+  const pillarLen = Math.hypot(height, rBot - rTop);
+  const midR = (rBot + rTop) * 0.5;
+
+  const floors = useMemo(() => {
+    const n = Math.max(6, Math.round(height / 1.25));
+    const list: { y: number; r: number; bright: number }[] = [];
+    for (let i = 0; i < n; i++) {
+      const u = (i + 0.55) / (n + 0.2);
+      const y = Math.min(height * 0.96, u * height);
+      const r = rBot + (rTop - rBot) * (y / height);
+      const bright = 0.5 + seedRand(seed * 11 + i * 7) * 0.5;
+      // Occasional dim floor (some lights off)
+      const on = seedRand(seed * 3 + i * 13) > 0.12;
+      list.push({ y, r, bright: on ? bright : 0.12 });
+    }
+    return list;
+  }, [height, rBot, rTop, seed]);
+
+  const pillars = useMemo(() => {
+    const n = Math.max(22, Math.round(radius * 12));
+    const items: { a: number; x: number; z: number }[] = [];
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + 0.02;
+      items.push({ a, x: Math.cos(a), z: Math.sin(a) });
+    }
+    return items;
+  }, [radius]);
+
+  const pillarW = Math.max(0.11, (Math.PI * midR * 2) / pillars.length * 0.78);
+  const pillarD = Math.max(0.09, radius * 0.06);
+
+  return (
+    <group {...props}>
+      {/* —— INNER core (milky white, soft structure) —— */}
+      <mesh position={[0, height / 2, 0]}>
+        <cylinderGeometry args={[rTop * 0.55, rBot * 0.55, height * 0.98, 20, 1, false]} />
+        <meshStandardMaterial
+          color="#f2eee6"
+          emissive="#fff4e4"
+          emissiveIntensity={0.18}
+          roughness={0.72}
+          metalness={0.02}
+        />
+      </mesh>
+
+      {/* —— INNER: horizontal glowing floor slices —— */}
+      {floors.map((f, i) => (
+        <group key={`floor-${i}`} position={[0, f.y, 0]}>
+          {/* Structural floor plate */}
+          <mesh>
+            <cylinderGeometry args={[f.r * 0.88, f.r * 0.88, 0.08, 32]} />
+            <meshStandardMaterial color="#2c2620" roughness={0.75} metalness={0.08} />
+          </mesh>
+          {/* Lit volume between floors — the warm “rooms” slice */}
+          <mesh position={[0, 0.14, 0]}>
+            <cylinderGeometry
+              args={[f.r * 0.9, f.r * 0.9, 0.28 + f.bright * 0.15, 32]}
+            />
+            <meshStandardMaterial
+              color="#ffd8a0"
+              emissive="#ffb850"
+              emissiveIntensity={0.4 + f.bright * 1.5}
+              roughness={0.5}
+              metalness={0}
+              transparent
+              opacity={0.55 + f.bright * 0.4}
+            />
+          </mesh>
+          {/* Bright edge ring (reads through glass pillars) */}
+          <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0.14, 0]}>
+            <torusGeometry args={[f.r * 0.91, 0.045, 6, 40]} />
+            <meshBasicMaterial
+              color="#ffd090"
+              transparent
+              opacity={0.35 + f.bright * 0.6}
+            />
+          </mesh>
+        </group>
+      ))}
+
+      {/* Lobby — brightest bottom slice */}
+      <mesh position={[0, height * 0.08, 0]}>
+        <cylinderGeometry args={[rBot * 0.9, rBot * 0.94, height * 0.14, 32]} />
+        <meshStandardMaterial
+          color="#ffe8c0"
+          emissive="#ffc070"
+          emissiveIntensity={2.0}
+          roughness={0.4}
+          transparent
+          opacity={0.95}
+        />
+      </mesh>
+
+      {/* —— OUTER: vertical glass pillars —— */}
+      {pillars.map((p, i) => (
+        <group
+          key={`pillar-${i}`}
+          position={[p.x * midR * 1.04, height / 2, p.z * midR * 1.04]}
+          rotation={[0, -p.a, 0]}
+        >
+          {/* Lean top inward with the taper (local +X tilt after facing out) */}
+          <mesh rotation={[lean, 0, 0]} castShadow>
+            <boxGeometry args={[pillarW, pillarLen, pillarD]} />
+            <meshStandardMaterial
+              color={color}
+              roughness={0.06}
+              metalness={0.18}
+              transparent
+              opacity={0.48}
+              emissive="#c8dcec"
+              emissiveIntensity={0.12}
+              envMapIntensity={1.6}
+              depthWrite={false}
+            />
+          </mesh>
+        </group>
+      ))}
+
+      {/* Very light glass veil between pillars */}
+      <mesh position={[0, height / 2, 0]}>
+        <cylinderGeometry args={[rTop * 1.03, rBot * 1.03, height, 48, 1, true]} />
+        <meshStandardMaterial
+          color="#f2f8fc"
+          transparent
+          opacity={0.07}
+          roughness={0.04}
+          metalness={0.25}
+          depthWrite={false}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+
+      {/* Flat roof */}
+      <mesh position={[0, height + 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]} castShadow receiveShadow>
+        <circleGeometry args={[rTop * 0.92, 40]} />
+        <meshStandardMaterial color="#d0cac0" roughness={0.55} metalness={0.08} />
+      </mesh>
+      {/* Scalloped pillar caps at the flat top */}
+      {pillars.map((p, i) => (
+        <mesh
+          key={`cap-${i}`}
+          position={[p.x * rTop * 1.04, height + 0.05, p.z * rTop * 1.04]}
+        >
+          <sphereGeometry args={[pillarW * 0.42, 8, 6]} />
+          <meshStandardMaterial
+            color="#eef4f8"
+            transparent
+            opacity={0.65}
+            roughness={0.12}
+            metalness={0.2}
+          />
+        </mesh>
+      ))}
+      <mesh position={[0, height + 0.01, 0]} rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[rTop * 1.03, 0.035, 8, 48]} />
+        <meshStandardMaterial color="#e0dcd4" roughness={0.4} metalness={0.12} />
+      </mesh>
+
+      <mesh position={[0, 0.05, 0]} rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[rBot + 0.07, 0.05, 8, 48]} />
+        <meshStandardMaterial color="#c4beb4" roughness={0.5} metalness={0.1} />
       </mesh>
     </group>
   );
+}
+
+/** Radius of a GlassTaperTower at height y (for rings / beacons). */
+export function glassTaperRadiusAt(
+  height: number,
+  radius: number,
+  y: number,
+  topScale = 0.62,
+): number {
+  const u = Math.min(1, Math.max(0, y / height));
+  return radius * (1 - u) + radius * topScale * u;
 }
 
 // Subtle structural-rib relief for glass domes — bump only, no color map,
@@ -888,9 +1156,14 @@ export function WindowBand({
 
 /** Hull radius of a Teardrop(height, radius) at height y — for placing
  *  window bands so they sit on the skin instead of inside it. */
-export function teardropRadiusAt(height: number, radius: number, y: number): number {
+export function teardropRadiusAt(
+  height: number,
+  radius: number,
+  y: number,
+  tip: "sharp" | "soft" = "sharp",
+): number {
   const u = Math.min(1, Math.max(0, y / height));
-  return radius * Math.sin(Math.PI * Math.pow(u, 0.62)) * (1 - u * 0.12) + 0.04;
+  return teardropProfileRadius(u, radius, tip) + 0.04;
 }
 
 /** Pod-like sunlight collector: translucent lens on a slender mast, optional
@@ -996,11 +1269,12 @@ export function SunlightPodRing({
   );
 }
 
-/** Build color+alpha maps from a white-wall hydro photo so leaves show and
- *  empty wall drops out. Crops UV to the leafy band (skips empty ceiling strip). */
+/** Build color+alpha maps from a white-wall hydro photo. Soft key keeps the
+ *  strip reading as continuous foliage rather than swiss-cheese cutouts. */
 function prepHydroMaps(
   src: THREE.Texture,
   length: number,
+  seamless = false,
 ): { color: THREE.CanvasTexture; alpha: THREE.CanvasTexture } | null {
   const img = src.image as HTMLImageElement | ImageBitmap | undefined;
   if (!img || !("width" in img) || !img.width) return null;
@@ -1008,9 +1282,8 @@ function prepHydroMaps(
   const w = img.width;
   const h = img.height;
   // Source photo: tubes/lights along the top, hanging plants fill the middle.
-  // Crop to that band so the plane isn't mostly white wall.
-  const cropY0 = Math.floor(h * 0.08);
-  const cropY1 = Math.floor(h * 0.92);
+  const cropY0 = Math.floor(h * 0.06);
+  const cropY1 = Math.floor(h * 0.94);
   const ch = cropY1 - cropY0;
 
   const cv = document.createElement("canvas");
@@ -1031,27 +1304,38 @@ function prepHydroMaps(
     const r = px[i];
     const g = px[i + 1];
     const b = px[i + 2];
-    // White / pale wall → transparent; green foliage → opaque
     const maxc = Math.max(r, g, b);
     const minc = Math.min(r, g, b);
     const sat = maxc === 0 ? 0 : (maxc - minc) / maxc;
-    const isGreen = g > r * 0.95 && g > b * 0.85 && g > 55;
-    const isLitTube = (r > 160 && b > 160 && g < 200) || (b > 180 && g > 150);
-    let a = 0;
-    if (isGreen) a = 255;
-    else if (isLitTube) a = 210;
-    else if (sat > 0.22 && maxc < 220) a = Math.min(255, sat * 320);
-    else if (maxc < 100) a = 40; // dark fixtures
+    // Soft key: only pure pale wall goes fully transparent. Greens, tubes,
+    // midtones stay mostly opaque so the crown reads as one continuous band.
+    let a = 255;
+    if (maxc > 210 && sat < 0.12) {
+      // near-white wall → soft fade
+      a = Math.max(0, Math.round(255 - (maxc - 210) * 4.5));
+    } else if (maxc > 185 && sat < 0.08) {
+      a = 90;
+    } else if (g > 50 && g >= r * 0.85) {
+      a = 255; // foliage solid
+    } else if (sat > 0.15) {
+      a = 230; // lit tubes / fixtures
+    } else if (maxc < 90) {
+      a = 180;
+    }
     ap[i] = ap[i + 1] = ap[i + 2] = a;
     ap[i + 3] = 255;
   }
   aCtx.putImageData(aImg, 0, 0);
 
+  const repeatX = seamless
+    ? Math.max(2.4, length / 1.6)
+    : Math.max(1.15, length / 2.2);
+
   const color = new THREE.CanvasTexture(cv);
   color.colorSpace = THREE.SRGBColorSpace;
   color.wrapS = THREE.RepeatWrapping;
   color.wrapT = THREE.ClampToEdgeWrapping;
-  color.repeat.set(Math.max(1.15, length / 2.2), 1);
+  color.repeat.set(repeatX, 1);
   color.anisotropy = 4;
   color.needsUpdate = true;
 
@@ -1059,20 +1343,23 @@ function prepHydroMaps(
   alpha.colorSpace = THREE.NoColorSpace;
   alpha.wrapS = THREE.RepeatWrapping;
   alpha.wrapT = THREE.ClampToEdgeWrapping;
-  alpha.repeat.set(Math.max(1.15, length / 2.2), 1);
+  alpha.repeat.set(repeatX, 1);
   alpha.needsUpdate = true;
 
   return { color, alpha };
 }
 
-/** Wall-top hydroponic channel: trough at roof line, foliage hangs down into
- *  the room (from lights/roof toward mid-wall). */
+/** Wall-top hydroponic channel: trough at roof line, foliage hangs down. */
 export function HydroponicChannel({
   length = 6,
   accent = "#7cffc4",
   grow = "#c48aff",
   imageMap = "/textures/hydroponic-greenery.jpg",
   plantHeight = 1.25,
+  /** Hide trough geometry when a parent shelf already provides the ledge. */
+  showTrough = true,
+  /** Tighter UV repeat for a continuous crown band. */
+  seamless = false,
   ...props
 }: {
   length?: number;
@@ -1080,6 +1367,8 @@ export function HydroponicChannel({
   grow?: string;
   imageMap?: string;
   plantHeight?: number;
+  showTrough?: boolean;
+  seamless?: boolean;
 } & ThreeElements["group"]) {
   const [maps, setMaps] = useState<{
     color: THREE.Texture;
@@ -1093,7 +1382,7 @@ export function HydroponicChannel({
       imageMap,
       (t) => {
         if (cancelled) return;
-        const built = prepHydroMaps(t, length);
+        const built = prepHydroMaps(t, length, seamless);
         if (built) setMaps(built);
       },
       undefined,
@@ -1104,45 +1393,373 @@ export function HydroponicChannel({
     return () => {
       cancelled = true;
     };
-  }, [imageMap, length]);
+  }, [imageMap, length, seamless]);
 
   return (
     <group {...props}>
-      {/* channel trough at the roof line */}
-      <mesh position={[0, 0, 0]}>
-        <boxGeometry args={[length, 0.08, 0.26]} />
-        <meshStandardMaterial color="#2a3040" metalness={0.45} roughness={0.4} />
-      </mesh>
-      {/* hydro tube */}
-      <mesh position={[0, -0.02, 0]} rotation={[0, 0, Math.PI / 2]}>
-        <cylinderGeometry args={[0.035, 0.035, length * 0.96, 10]} />
-        <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={0.5} roughness={0.3} />
-      </mesh>
-      {/* grow light under trough */}
-      <mesh position={[0, -0.05, 0.07]}>
-        <boxGeometry args={[length * 0.94, 0.022, 0.03]} />
-        <meshBasicMaterial color={grow} transparent opacity={0.72} />
-      </mesh>
-      {/* foliage hanging from roof → down past light height into the room */}
+      {showTrough && (
+        <>
+          <mesh position={[0, 0, 0]}>
+            <boxGeometry args={[length, 0.08, 0.26]} />
+            <meshStandardMaterial color="#2a3040" metalness={0.45} roughness={0.4} />
+          </mesh>
+          <mesh position={[0, -0.02, 0]} rotation={[0, 0, Math.PI / 2]}>
+            <cylinderGeometry args={[0.035, 0.035, length * 0.96, 10]} />
+            <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={0.5} roughness={0.3} />
+          </mesh>
+          <mesh position={[0, -0.05, 0.07]}>
+            <boxGeometry args={[length * 0.94, 0.022, 0.03]} />
+            <meshBasicMaterial color={grow} transparent opacity={0.72} />
+          </mesh>
+        </>
+      )}
       {maps && (
-        <mesh position={[0, -plantHeight * 0.5 - 0.04, 0.05]}>
-          <planeGeometry args={[length * 0.98, plantHeight]} />
-          <meshStandardMaterial
-            map={maps.color}
-            alphaMap={maps.alpha}
-            transparent
-            alphaTest={0.2}
-            roughness={0.85}
-            metalness={0}
-            side={THREE.DoubleSide}
-            depthWrite={false}
-            emissive="#0a2814"
-            emissiveIntensity={0.12}
-          />
-        </mesh>
+        <>
+          {/* primary foliage plane */}
+          <mesh position={[0, -plantHeight * 0.5 - 0.02, 0.04]}>
+            <planeGeometry args={[length * 1.02, plantHeight]} />
+            <meshStandardMaterial
+              map={maps.color}
+              alphaMap={maps.alpha}
+              transparent
+              alphaTest={0.12}
+              roughness={0.85}
+              metalness={0}
+              side={THREE.DoubleSide}
+              depthWrite={false}
+              emissive="#0a2814"
+              emissiveIntensity={0.1}
+            />
+          </mesh>
+          {/* second slightly offset layer for denser continuous fill */}
+          <mesh position={[0, -plantHeight * 0.48 - 0.06, 0.1]} scale={[1.02, 0.92, 1]}>
+            <planeGeometry args={[length * 1.02, plantHeight]} />
+            <meshStandardMaterial
+              map={maps.color}
+              alphaMap={maps.alpha}
+              transparent
+              alphaTest={0.18}
+              roughness={0.88}
+              metalness={0}
+              side={THREE.DoubleSide}
+              depthWrite={false}
+              emissive="#0a2814"
+              emissiveIntensity={0.08}
+              opacity={0.92}
+            />
+          </mesh>
+        </>
       )}
     </group>
   );
+}
+
+/**
+ * Dense living-wall strip — solid continuous foliage like a planted green wall
+ * (no swiss-cheese alpha). Soft fade only at the bottom edge so it blends.
+ */
+function LivingWallStrip({
+  length,
+  height,
+  imageMap = "/textures/living-wall.jpg",
+  ...props
+}: {
+  length: number;
+  height: number;
+  imageMap?: string;
+} & ThreeElements["group"]) {
+  const [maps, setMaps] = useState<{
+    color: THREE.Texture;
+    alpha: THREE.Texture;
+  } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    new THREE.TextureLoader().load(imageMap, (t) => {
+      if (cancelled) return;
+      const img = t.image as HTMLImageElement | ImageBitmap | undefined;
+      if (!img || !("width" in img) || !img.width) return;
+
+      const w = img.width;
+      const h = img.height;
+      const cv = document.createElement("canvas");
+      cv.width = w;
+      cv.height = h;
+      const ctx = cv.getContext("2d")!;
+      ctx.drawImage(img as CanvasImageSource, 0, 0);
+      const color = new THREE.CanvasTexture(cv);
+      color.colorSpace = THREE.SRGBColorSpace;
+      color.wrapS = THREE.RepeatWrapping;
+      color.wrapT = THREE.ClampToEdgeWrapping;
+      // Tile horizontally so long walls stay dense leaf detail
+      color.repeat.set(Math.max(1.6, length / 2.8), 1);
+      color.anisotropy = 8;
+      color.needsUpdate = true;
+
+      // Soft bottom fade only — keep the band fully solid so it flows smoothly
+      const aCv = document.createElement("canvas");
+      aCv.width = 4;
+      aCv.height = 256;
+      const aCtx = aCv.getContext("2d")!;
+      const g = aCtx.createLinearGradient(0, 0, 0, 256);
+      g.addColorStop(0, "#ffffff");
+      g.addColorStop(0.78, "#ffffff");
+      g.addColorStop(0.92, "#c8c8c8");
+      g.addColorStop(1, "#000000");
+      aCtx.fillStyle = g;
+      aCtx.fillRect(0, 0, 4, 256);
+      const alpha = new THREE.CanvasTexture(aCv);
+      alpha.colorSpace = THREE.NoColorSpace;
+      alpha.wrapS = alpha.wrapT = THREE.ClampToEdgeWrapping;
+      alpha.needsUpdate = true;
+
+      setMaps({ color, alpha });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [imageMap, length]);
+
+  if (!maps) return <group {...props} />;
+
+  return (
+    <group {...props}>
+      {/* Main solid living-wall plane */}
+      <mesh position={[0, -height * 0.5, 0.03]} castShadow>
+        <planeGeometry args={[length, height]} />
+        <meshStandardMaterial
+          map={maps.color}
+          alphaMap={maps.alpha}
+          transparent
+          alphaTest={0.04}
+          roughness={0.78}
+          metalness={0}
+          side={THREE.DoubleSide}
+          depthWrite
+          emissive="#06180c"
+          emissiveIntensity={0.08}
+        />
+      </mesh>
+      {/* Slightly offset second layer for depth / soft volume */}
+      <mesh position={[0, -height * 0.48 - 0.04, 0.08]} scale={[1.01, 0.96, 1]}>
+        <planeGeometry args={[length, height]} />
+        <meshStandardMaterial
+          map={maps.color}
+          alphaMap={maps.alpha}
+          transparent
+          alphaTest={0.08}
+          roughness={0.82}
+          metalness={0}
+          side={THREE.DoubleSide}
+          depthWrite={false}
+          emissive="#06180c"
+          emissiveIntensity={0.05}
+          opacity={0.88}
+        />
+      </mesh>
+    </group>
+  );
+}
+
+type PlantSide = {
+  pos: [number, number, number];
+  rot: [number, number, number];
+  length: number;
+  height: number;
+  /** Skip the thick shelf rail (used for short over-window strips). */
+  thinRail?: boolean;
+};
+
+/**
+ * Continuous living-wall crown. Optional gap on the −Z wall keeps a window
+ * clear: plants run on both flanks + a short band only above the frame.
+ */
+export function CeilingPlantShelf({
+  width,
+  depth,
+  y,
+  plantHeight = 1.35,
+  inset = 0.12,
+  grow = "#c48aff",
+  imageMap = "/textures/living-wall.jpg",
+  /** Clear opening on the −Z wall so a window stays visible. */
+  windowGap,
+}: {
+  width: number;
+  depth: number;
+  y: number;
+  plantHeight?: number;
+  inset?: number;
+  /** @deprecated unused — kept for call-site compat */
+  accent?: string;
+  grow?: string;
+  imageMap?: string;
+  windowGap?: {
+    /** Opening width (glass + frame). */
+    width: number;
+    /** Top of window frame in world Y — plants above this only in the center. */
+    topY: number;
+  };
+}) {
+  const halfW = width / 2;
+  const halfD = depth / 2;
+  const lenX = width + 0.12;
+  const lenZ = depth + 0.12;
+  const shelfDepth = 0.28;
+  const shelfH = 0.06;
+  // Light wood matching the lunar window frame
+  const frameWood = "#e8e2d6";
+  const zFront = halfD - inset;
+  const zBack = -halfD + inset;
+
+  const sides: PlantSide[] = [
+    // +Z (door)
+    { pos: [0, y, zFront], rot: [0, Math.PI, 0], length: lenX, height: plantHeight },
+    // ±X
+    { pos: [-halfW + inset, y, 0], rot: [0, Math.PI / 2, 0], length: lenZ, height: plantHeight },
+    { pos: [halfW - inset, y, 0], rot: [0, -Math.PI / 2, 0], length: lenZ, height: plantHeight },
+  ];
+
+  if (windowGap) {
+    const gap = windowGap.width + 0.25; // margin past frame
+    const flank = Math.max(0.55, (width - gap) / 2);
+    const leftX = -halfW + inset + flank / 2 - 0.02;
+    const rightX = halfW - inset - flank / 2 + 0.02;
+    // Full-height flanks beside the window
+    sides.push(
+      { pos: [leftX, y, zBack], rot: [0, 0, 0], length: flank + 0.08, height: plantHeight },
+      { pos: [rightX, y, zBack], rot: [0, 0, 0], length: flank + 0.08, height: plantHeight },
+    );
+    // Short band hanging from the ceiling only — stops above the window frame
+    const aboveH = Math.max(0.38, y - windowGap.topY - 0.1);
+    sides.push({
+      pos: [0, y, zBack],
+      rot: [0, 0, 0],
+      length: gap + 0.12,
+      height: aboveH,
+      thinRail: true,
+    });
+  } else {
+    sides.push({
+      pos: [0, y, zBack],
+      rot: [0, 0, 0],
+      length: lenX,
+      height: plantHeight,
+    });
+  }
+
+  return (
+    <group>
+      {sides.map((s, i) => {
+        // Wood border sits just under the hanging foliage bottom edge
+        const borderY = -s.height + 0.04;
+        return (
+          <group key={`ledge-${i}`} position={s.pos} rotation={s.rot}>
+            {/* ceiling shelf rail — light wood like the window */}
+            {!s.thinRail && (
+              <mesh position={[0, 0.02, 0.02]} castShadow receiveShadow>
+                <boxGeometry args={[s.length, shelfH, shelfDepth]} />
+                <meshStandardMaterial color={frameWood} roughness={0.48} metalness={0.05} />
+              </mesh>
+            )}
+            {/* wood border under greenery (picture-rail trim) */}
+            <mesh position={[0, borderY, 0.06]} castShadow receiveShadow>
+              <boxGeometry args={[s.length + 0.04, 0.055, 0.09]} />
+              <meshStandardMaterial color={frameWood} roughness={0.48} metalness={0.05} />
+            </mesh>
+            {/* thin inner lip for depth */}
+            <mesh position={[0, borderY + 0.03, 0.1]}>
+              <boxGeometry args={[s.length + 0.02, 0.018, 0.04]} />
+              <meshStandardMaterial color="#ddd6c8" roughness={0.52} />
+            </mesh>
+          </group>
+        );
+      })}
+      {(
+        [
+          [halfW - inset, halfD - inset],
+          [halfW - inset, -halfD + inset],
+          [-halfW + inset, halfD - inset],
+          [-halfW + inset, -halfD + inset],
+        ] as const
+      ).map(([x, z], i) => (
+        <mesh key={`corner-${i}`} position={[x, y + 0.02, z]} castShadow>
+          <boxGeometry args={[shelfDepth + 0.02, shelfH, shelfDepth + 0.02]} />
+          <meshStandardMaterial color={frameWood} roughness={0.48} metalness={0.05} />
+        </mesh>
+      ))}
+      {sides.map((s, i) => (
+        <LivingWallStrip
+          key={`plants-${i}`}
+          length={s.length}
+          height={s.height}
+          imageMap={imageMap}
+          position={s.pos}
+          rotation={s.rot}
+        />
+      ))}
+      <pointLight position={[0, y - 0.4, 0]} intensity={3.5} color="#c8ffd8" distance={8} decay={2} />
+    </group>
+  );
+}
+
+/** Procedural tileable tatami mat texture (igusa weave + fabric binding). */
+export function buildTatamiTexture(size = 512): THREE.CanvasTexture {
+  const cv = document.createElement("canvas");
+  cv.width = size;
+  cv.height = size;
+  const ctx = cv.getContext("2d")!;
+
+  // Base straw tone
+  ctx.fillStyle = "#d2c8a4";
+  ctx.fillRect(0, 0, size, size);
+
+  // Two classic half-mats side by side (each ~2:1), binding borders
+  const mats: [number, number, number, number][] = [
+    [0, 0, size / 2, size],
+    [size / 2, 0, size / 2, size],
+  ];
+  const border = Math.max(4, Math.floor(size * 0.028));
+
+  for (const [mx, my, mw, mh] of mats) {
+    // weave: fine horizontal straw lines
+    for (let y = my + border; y < my + mh - border; y += 2) {
+      const n = ((y * 17 + mx * 3) % 7) / 7;
+      const g = 180 + Math.floor(n * 35);
+      const r = g + 8 + Math.floor(n * 10);
+      const b = g - 40 + Math.floor(n * 12);
+      ctx.fillStyle = `rgb(${r},${g},${Math.max(80, b)})`;
+      ctx.fillRect(mx + border, y, mw - border * 2, 1);
+    }
+    // subtle vertical stitch every few px
+    for (let x = mx + border; x < mx + mw - border; x += 5) {
+      ctx.fillStyle = "rgba(120, 110, 70, 0.12)";
+      ctx.fillRect(x, my + border, 1, mh - border * 2);
+    }
+    // fabric binding — light heri cloth (warm taupe, not black)
+    ctx.fillStyle = "#b8a888";
+    ctx.fillRect(mx, my, mw, border);
+    ctx.fillRect(mx, my + mh - border, mw, border);
+    ctx.fillRect(mx, my, border, mh);
+    ctx.fillRect(mx + mw - border, my, border, mh);
+    // soft inner edge
+    ctx.fillStyle = "#c9ba9a";
+    ctx.fillRect(mx + border - 1, my + border - 1, mw - border * 2 + 2, 2);
+    ctx.fillRect(mx + border - 1, my + mh - border - 1, mw - border * 2 + 2, 2);
+    ctx.fillRect(mx + border - 1, my + border, 2, mh - border * 2);
+    ctx.fillRect(mx + mw - border - 1, my + border, 2, mh - border * 2);
+  }
+
+  // center seam between the two mats — lighter too
+  ctx.fillStyle = "#a89878";
+  ctx.fillRect(size / 2 - 1, 0, 2, size);
+
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.anisotropy = 4;
+  tex.needsUpdate = true;
+  return tex;
 }
 
 /** Deterministic pseudo-random, shared convention across the map. */

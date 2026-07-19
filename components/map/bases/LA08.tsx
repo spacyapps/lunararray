@@ -12,16 +12,16 @@ import BaseLighting from "./BaseLighting";
 import DomeGarden from "./DomeGarden";
 import {
   Beacon,
+  GlassTaperTower,
   LensDome,
   SunlightPodRing,
-  Teardrop,
   WindowBand,
   seedRand,
-  teardropRadiusAt,
 } from "./parts";
 
 const ACCENT = "#c48aff";
-const HULL = "#eef2f7";
+/** Warm glass — multiplies the fluted facade. */
+const HULL = "#f5f0ea";
 const WARM = "#ffd9a0";
 const PARK = "#9be8b0";
 
@@ -143,27 +143,30 @@ export default function LA08() {
         </group>
       ))}
 
-      {TOWERS.map((t, i) => (
-        <group
-          key={i}
-          position={[t.x, 0, t.z]}
-          rotation={[0, 0, (seedRand(i * 13 + 3) - 0.5) * 0.06]}
-        >
-          <Teardrop height={t.h} radius={t.r} color={HULL} variant="residential" />
-          {[0.22, 0.4, 0.58].map((f, j) => (
-            <WindowBand
-              key={j}
-              radius={teardropRadiusAt(t.h, t.r, t.h * f)}
-              position={[0, t.h * f, 0]}
-              color={j === 2 && i % 3 === 0 ? ACCENT : WARM}
-              thickness={0.06}
+      {TOWERS.map((t, i) => {
+        // Mild taper so they read as fluted cylinders, not cones
+        const topScale = 0.72 + seedRand(i * 17 + 2) * 0.1;
+        return (
+          <group key={i} position={[t.x, 0, t.z]}>
+            <GlassTaperTower
+              height={t.h}
+              radius={t.r * 1.05}
+              topScale={topScale}
+              color={HULL}
+              imageMap="/textures/glass-flute-facade.jpg"
+              seed={i * 41 + 7}
             />
-          ))}
-          {i % 4 === 0 && (
-            <Beacon color={ACCENT} size={0.14} speed={1.6 + i * 0.3} position={[0, t.h + 0.4, 0]} />
-          )}
-        </group>
-      ))}
+            {i % 4 === 0 && (
+              <Beacon
+                color={ACCENT}
+                size={0.1}
+                speed={1.6 + i * 0.3}
+                position={[0, t.h + 0.14, 0]}
+              />
+            )}
+          </group>
+        );
+      })}
 
       <AtmosphereBeams />
 
