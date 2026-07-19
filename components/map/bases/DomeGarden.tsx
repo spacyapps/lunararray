@@ -1,7 +1,7 @@
 "use client";
 
-// Production greenery under glass: densely tiled crop-row texture so plants
-// read as many small beds (industrial greenhouse), not one giant bush.
+// Production greenery under sealed glass. Domes sit in dug crater bowls for
+// micrometeorite/radiation protection — beds read as many crop rows, not one bush.
 
 import { useEffect, useState } from "react";
 import * as THREE from "three";

@@ -5,7 +5,7 @@
 // organic curved silhouettes (teardrops, lenses, swept tubes) with
 // saturated accents; military scenes stay angular and colder.
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useFrame, type ThreeElements } from "@react-three/fiber";
 import * as THREE from "three";
 
@@ -617,6 +617,242 @@ function buildDomeBump(): HTMLCanvasElement {
   return cv;
 }
 
+/**
+ * Excavated crater bowl under a dome site — the landscape is already dug,
+ * so the glass sits in a natural/engineered depression (rim + dark floor).
+ */
+export function CraterBowl({
+  radius = 3,
+  depth = 0.18,
+  floorColor = "#6a665c",
+  rimColor = "#8a867c",
+}: {
+  radius?: number;
+  depth?: number;
+  floorColor?: string;
+  rimColor?: string;
+}) {
+  return (
+    <group>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -depth * 0.35, 0]} receiveShadow>
+        <circleGeometry args={[radius * 0.92, 36]} />
+        <meshStandardMaterial color={floorColor} roughness={0.97} metalness={0.02} />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]} receiveShadow>
+        <ringGeometry args={[radius * 0.88, radius * 1.18, 40]} />
+        <meshStandardMaterial color={rimColor} roughness={0.95} metalness={0.03} />
+      </mesh>
+      {/* soft outer ejecta apron */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]}>
+        <ringGeometry args={[radius * 1.15, radius * 1.45, 36]} />
+        <meshStandardMaterial
+          color={rimColor}
+          roughness={0.98}
+          transparent
+          opacity={0.45}
+          depthWrite={false}
+        />
+      </mesh>
+    </group>
+  );
+}
+
+/** Incomplete glass frame — ribs + partial shell for under-construction domes. */
+export function DomeScaffold({
+  r = 3,
+  progress = 0.55,
+  accent = "#c48aff",
+  hull = "#d8dce8",
+}: {
+  r?: number;
+  /** 0–1 how much of the shell is glazed. */
+  progress?: number;
+  accent?: string;
+  hull?: string;
+}) {
+  const ribs = 8;
+  const glazed = Math.max(0.25, Math.min(1, progress));
+  return (
+    <group>
+      {Array.from({ length: ribs }).map((_, i) => {
+        const a = (i / ribs) * Math.PI * 2;
+        return (
+          <group key={`rib-${i}`} rotation={[0, a, 0]}>
+            <mesh rotation={[0, 0, Math.PI / 2]}>
+              <torusGeometry args={[r * 0.92, 0.038, 6, 28, Math.PI]} />
+              <meshStandardMaterial color={hull} metalness={0.55} roughness={0.32} />
+            </mesh>
+          </group>
+        );
+      })}
+      <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, r * 0.08, 0]}>
+        <torusGeometry args={[r * 0.92, 0.05, 8, 40]} />
+        <meshStandardMaterial
+          color={accent}
+          emissive={accent}
+          emissiveIntensity={0.35}
+          metalness={0.4}
+          roughness={0.4}
+        />
+      </mesh>
+      {/* staging deck / pad inside incomplete shell */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.06, 0]}>
+        <circleGeometry args={[r * 0.75, 28]} />
+        <meshStandardMaterial color="#9a968c" metalness={0.25} roughness={0.55} />
+      </mesh>
+      {/* partial glass shell */}
+      <mesh scale={[1, 0.48, 1]}>
+        <sphereGeometry args={[r, 32, 16, 0, Math.PI * 2 * glazed, 0, Math.PI / 2]} />
+        <meshStandardMaterial
+          color="#c8e8f8"
+          transparent
+          opacity={0.28}
+          roughness={0.15}
+          metalness={0.1}
+          side={THREE.DoubleSide}
+          depthWrite={false}
+        />
+      </mesh>
+      <mesh position={[0, r * 0.52, 0]}>
+        <boxGeometry args={[0.14, 0.14, 0.14]} />
+        <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={1.2} />
+      </mesh>
+    </group>
+  );
+}
+
+/** Open mineral dig in a crater — no green; ore glow + stockpiles. */
+export function MineralPit({
+  radius = 3,
+  ore = "#e8a050",
+  seed = 1,
+}: {
+  radius?: number;
+  ore?: string;
+  seed?: number;
+}) {
+  return (
+    <group>
+      {/* deep floor */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.12, 0]} receiveShadow>
+        <circleGeometry args={[radius * 0.85, 32]} />
+        <meshStandardMaterial color="#3a3428" roughness={0.95} metalness={0.08} />
+      </mesh>
+      {/* ore seams */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.08, 0]}>
+        <ringGeometry args={[radius * 0.25, radius * 0.55, 28]} />
+        <meshStandardMaterial
+          color={ore}
+          emissive={ore}
+          emissiveIntensity={0.55}
+          roughness={0.55}
+          metalness={0.35}
+        />
+      </mesh>
+      {/* stockpile mounds */}
+      {[0, 1, 2, 3].map((i) => {
+        const a = (i / 4) * Math.PI * 2 + seed * 0.2;
+        const dist = radius * (0.45 + seedRand(seed * 9 + i) * 0.2);
+        const s = 0.25 + seedRand(seed * 3 + i * 5) * 0.2;
+        return (
+          <mesh
+            key={i}
+            position={[Math.cos(a) * dist, s * 0.35, Math.sin(a) * dist]}
+            scale={[1.2, 0.55, 1]}
+            castShadow
+          >
+            <sphereGeometry args={[s, 12, 8]} />
+            <meshStandardMaterial
+              color={ore}
+              emissive={ore}
+              emissiveIntensity={0.25}
+              roughness={0.7}
+              metalness={0.25}
+            />
+          </mesh>
+        );
+      })}
+      {/* survey mast */}
+      <mesh position={[radius * 0.15, 0.7, -radius * 0.1]} castShadow>
+        <cylinderGeometry args={[0.04, 0.05, 1.4, 8]} />
+        <meshStandardMaterial color="#9aa0b0" metalness={0.5} roughness={0.4} />
+      </mesh>
+      <mesh position={[radius * 0.15, 1.45, -radius * 0.1]}>
+        <sphereGeometry args={[0.1, 10, 8]} />
+        <meshStandardMaterial color={ore} emissive={ore} emissiveIntensity={0.9} />
+      </mesh>
+      {/* open half-dome shield (not sealed garden glass) */}
+      <mesh scale={[1, 0.42, 1]} rotation={[0, 0.4, 0]}>
+        <sphereGeometry args={[radius * 1.05, 28, 14, 0, Math.PI * 1.15, 0, Math.PI / 2]} />
+        <meshStandardMaterial
+          color="#c8b8a0"
+          transparent
+          opacity={0.22}
+          roughness={0.25}
+          metalness={0.15}
+          side={THREE.DoubleSide}
+          depthWrite={false}
+        />
+      </mesh>
+      <pointLight position={[0, 0.8, 0]} intensity={8} color={ore} distance={radius * 3} decay={2} />
+    </group>
+  );
+}
+
+export type CraterDomeKind = "garden" | "construction" | "mineral";
+
+/**
+ * Crater-sited dome: dug bowl + either garden glass, scaffold build, or mineral dig.
+ * Premise: domes sit in excavated landscape for protection.
+ * Garden content (plants + glass) is composed by the caller via `garden` prop slot —
+ * use `kind` + optional render props below from LA-08.
+ */
+export function CraterDomeSite({
+  radius = 2.5,
+  kind = "garden",
+  seed = 1,
+  accent = "#c48aff",
+  warm = "#ffd9a0",
+  ore = "#e8a050",
+  garden,
+  ...props
+}: {
+  radius?: number;
+  kind?: CraterDomeKind;
+  seed?: number;
+  accent?: string;
+  warm?: string;
+  ore?: string;
+  /** Plant beds + sealed glass for kind="garden". */
+  garden?: ReactNode;
+} & ThreeElements["group"]) {
+  return (
+    <group {...props}>
+      <CraterBowl
+        radius={radius * 1.15}
+        floorColor={kind === "mineral" ? "#4a4034" : "#6a665c"}
+        rimColor={kind === "mineral" ? "#7a6a58" : "#8a867c"}
+      />
+      {kind === "garden" && garden}
+      {kind === "construction" && (
+        <DomeScaffold
+          r={radius}
+          progress={0.35 + seedRand(seed * 7) * 0.4}
+          accent={accent}
+          hull="#d0d4e0"
+        />
+      )}
+      {kind === "mineral" && <MineralPit radius={radius} ore={ore} seed={seed} />}
+      {kind === "construction" && (
+        <Beacon color={warm} size={0.12} speed={2.2} position={[radius * 0.7, 0.4, radius * 0.2]} />
+      )}
+      {kind === "mineral" && (
+        <Beacon color={ore} size={0.11} speed={1.8} position={[-radius * 0.55, 0.35, radius * 0.4]} />
+      )}
+    </group>
+  );
+}
+
 /** Flattened glass-like lens dome sitting on the ground. */
 export function LensDome({
   r = 5,
@@ -832,6 +1068,110 @@ export function SweepTube({
           metalness={0.55}
         />
       </mesh>
+    </group>
+  );
+}
+
+/**
+ * Prefab transit duct: modular tube sections with visible coupler rings and
+ * end flanges — assemble on-site for faster build / swap-out maintenance.
+ */
+export function PrefabTransitTube({
+  pts,
+  r = 0.14,
+  color = "#c8c4d8",
+  emissive,
+  /** World-space length of one prefab bay between couplers. */
+  segmentLen = 2.4,
+  ...props
+}: {
+  pts: [number, number, number][];
+  r?: number;
+  color?: string;
+  emissive?: string;
+  segmentLen?: number;
+} & ThreeElements["group"]) {
+  const curve = useMemo(
+    () => new THREE.CatmullRomCurve3(pts.map((p) => new THREE.Vector3(...p))),
+    [pts],
+  );
+  const length = useMemo(() => curve.getLength(), [curve]);
+  const segs = Math.max(2, Math.round(length / segmentLen));
+  // TubularPath with slight segment banding via denser UVs
+  const geometry = useMemo(
+    () => new THREE.TubeGeometry(curve, Math.max(24, segs * 6), r, 10, false),
+    [curve, r, segs],
+  );
+  const texture = useMemo(() => {
+    const tex = new THREE.CanvasTexture(buildTubeTexture());
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    // One panel ring per prefab bay
+    tex.repeat.set(1, segs);
+    tex.anisotropy = 2;
+    return tex;
+  }, [segs]);
+
+  const couplers = useMemo(() => {
+    const items: { pos: THREE.Vector3; quat: THREE.Quaternion }[] = [];
+    const up = new THREE.Vector3(0, 1, 0);
+    // Coupler at every segment boundary (including ends as flanges)
+    for (let i = 0; i <= segs; i++) {
+      const t = i / segs;
+      const pos = curve.getPointAt(t);
+      const tan = curve.getTangentAt(t).normalize();
+      const quat = new THREE.Quaternion().setFromUnitVectors(up, tan);
+      items.push({ pos, quat });
+    }
+    return items;
+  }, [curve, segs]);
+
+  const flangeColor = emissive ?? "#a090b8";
+
+  return (
+    <group {...props}>
+      <mesh geometry={geometry}>
+        <meshStandardMaterial
+          color={color}
+          map={texture}
+          bumpMap={texture}
+          bumpScale={0.045}
+          emissive={emissive ?? "#000000"}
+          emissiveIntensity={emissive ? 0.45 : 0}
+          roughness={0.4}
+          metalness={0.58}
+        />
+      </mesh>
+      {/* Coupler collars — bolt-on joints between prefab bays */}
+      {couplers.map((c, i) => {
+        const isEnd = i === 0 || i === couplers.length - 1;
+        return (
+          <group key={i} position={c.pos} quaternion={c.quat}>
+            <mesh>
+              <cylinderGeometry args={[r * (isEnd ? 1.45 : 1.32), r * (isEnd ? 1.45 : 1.32), r * (isEnd ? 0.55 : 0.38), 12]} />
+              <meshStandardMaterial
+                color={isEnd ? "#9a94a8" : "#b0a8bc"}
+                emissive={flangeColor}
+                emissiveIntensity={isEnd ? 0.35 : 0.2}
+                metalness={0.65}
+                roughness={0.32}
+              />
+            </mesh>
+            {/* outer clamp ring */}
+            <mesh>
+              <torusGeometry args={[r * (isEnd ? 1.48 : 1.35), r * 0.08, 6, 16]} />
+              <meshStandardMaterial
+                color="#d0c8e0"
+                emissive={flangeColor}
+                emissiveIntensity={0.25}
+                metalness={0.55}
+                roughness={0.35}
+              />
+            </mesh>
+          </group>
+        );
+      })}
     </group>
   );
 }

@@ -24,22 +24,30 @@ import { View, EMBED_CAM_POS, EMBED_FOV, MAP_CAM_POS, MAP_FOV, canEnter } from "
 import { STATIONS } from "@/lib/stations";
 import { APPROACHES, INTERIORS, ORBITS } from "./bases/orbits";
 import { DEFAULT_APPROACH, DEFAULT_INTERIOR, DEFAULT_ORBIT } from "./view";
+import { InfoTicker, LA08_DOME_CARDS, LA08_RESIDENCE_CARDS } from "./InfoTicker";
 
 const mono: React.CSSProperties = {
   fontFamily: "var(--mono)",
   textTransform: "uppercase",
 };
 
+/** Dark glass chips — readable on bright interiors and dark void alike. */
+const chromePanel: React.CSSProperties = {
+  background: "rgba(8, 10, 16, 0.82)",
+  border: "1px solid rgba(238, 242, 247, 0.16)",
+  backdropFilter: "blur(12px)",
+  boxShadow: "0 6px 24px rgba(0,0,0,0.4)",
+};
+
 const btnBase: React.CSSProperties = {
   ...mono,
+  ...chromePanel,
   fontSize: 10.5,
   letterSpacing: "0.26em",
-  color: "var(--ink)",
-  background: "rgba(238, 242, 247, 0.06)",
-  border: "1px solid rgba(238, 242, 247, 0.18)",
-  padding: "10px 16px",
+  color: "#eef2f7",
+  padding: "11px 18px",
   cursor: "pointer",
-  transition: "opacity 300ms ease, border-color 200ms ease, background 200ms ease",
+  transition: "border-color 200ms ease, background 200ms ease, transform 160ms ease",
 };
 
 export default function MapScene() {
@@ -254,15 +262,27 @@ export default function MapScene() {
         }}
       />
 
-      <div style={{ position: "absolute", top: 28, left: 32 }}>
+      {/* Top-left nav chip */}
+      <div
+        style={{
+          position: "absolute",
+          top: 24,
+          left: 24,
+          zIndex: 6,
+          ...chromePanel,
+          padding: "12px 16px",
+          maxWidth: "min(340px, calc(100vw - 48px))",
+        }}
+      >
         <Link
           href="/"
           style={{
             ...mono,
             fontSize: 11,
-            letterSpacing: "0.3em",
-            color: "var(--ink)",
+            letterSpacing: "0.28em",
+            color: "#eef2f7",
             textDecoration: "none",
+            display: "block",
           }}
         >
           ← LunarArray · Network Map
@@ -270,10 +290,10 @@ export default function MapScene() {
         <div
           style={{
             ...mono,
-            fontSize: 10,
-            letterSpacing: "0.22em",
-            color: "var(--ink-ghost)",
-            marginTop: 6,
+            fontSize: 9.5,
+            letterSpacing: "0.2em",
+            color: "rgba(238, 242, 247, 0.55)",
+            marginTop: 8,
             pointerEvents: "none",
           }}
         >
@@ -281,15 +301,30 @@ export default function MapScene() {
         </div>
       </div>
 
+      {/* Auto-scrolling site brief — exterior domes or residence systems */}
+      <InfoTicker
+        visible={
+          active?.id === "LA-08" &&
+          (view.mode === "base" || view.mode === "approach" || view.mode === "interior")
+        }
+        cards={view.mode === "interior" ? LA08_RESIDENCE_CARDS : LA08_DOME_CARDS}
+        style={{ top: 108 }}
+      />
+
+      {/* Bottom-left station label chip */}
       <div
         style={{
           position: "absolute",
-          left: 32,
-          bottom: 30,
+          left: 24,
+          bottom: 24,
+          zIndex: 6,
           pointerEvents: "none",
           opacity: labelStation ? 1 : 0,
           transform: labelStation ? "translateY(0)" : "translateY(6px)",
           transition: "opacity 220ms ease, transform 220ms ease",
+          ...chromePanel,
+          padding: "12px 16px",
+          maxWidth: 360,
         }}
       >
         <div
@@ -297,7 +332,7 @@ export default function MapScene() {
             ...mono,
             fontSize: 10.5,
             letterSpacing: "0.26em",
-            color: labelStation?.accent ?? "var(--accent)",
+            color: labelStation?.accent ?? "#c48aff",
           }}
         >
           {labelStation ? `${labelStation.id} · ${labelStation.name}` : ""}
@@ -305,28 +340,30 @@ export default function MapScene() {
         <div
           style={{
             fontFamily: "var(--sans)",
-            fontSize: 13.5,
-            color: "var(--ink-dim)",
+            fontSize: 13,
+            color: "rgba(238, 242, 247, 0.68)",
             marginTop: 6,
-            maxWidth: 360,
+            lineHeight: 1.45,
           }}
         >
           {view.mode === "interior"
-            ? "Residential bay · hydroponic CO₂ recycle · wall-crown gardens"
+            ? "Residential bay · artificial sky · wall-crown life support"
             : labelStation?.purpose}
         </div>
       </div>
 
-      {/* Right-side controls */}
+      {/* Bottom-right action stack */}
       <div
         style={{
           position: "absolute",
-          right: 32,
-          bottom: 30,
+          right: 24,
+          bottom: 24,
+          zIndex: 6,
           display: "flex",
           flexDirection: "column",
-          alignItems: "flex-end",
+          alignItems: "stretch",
           gap: 8,
+          minWidth: 168,
         }}
       >
         {enterable && (view.mode === "base" || view.mode === "approach") && (
@@ -334,32 +371,33 @@ export default function MapScene() {
             onClick={enterResidence}
             style={{
               ...btnBase,
-              borderColor: "rgba(196, 138, 255, 0.45)",
-              background: "rgba(196, 138, 255, 0.12)",
+              borderColor: "rgba(196, 138, 255, 0.55)",
+              background: "rgba(196, 138, 255, 0.22)",
+              color: "#f4eaff",
             }}
           >
             Enter residence
           </button>
         )}
         {(view.mode === "base" || view.mode === "approach") && (
-          <button
-            onClick={approachBase}
-            style={{
-              ...btnBase,
-              opacity: 1,
-              pointerEvents: "auto",
-            }}
-          >
+          <button onClick={approachBase} style={btnBase}>
             {view.mode === "approach" ? "← Wider orbit" : "Approach base"}
           </button>
         )}
         {view.mode === "interior" && (
-          <button onClick={exitResidence} style={{ ...btnBase, opacity: 1, pointerEvents: "auto" }}>
+          <button
+            onClick={exitResidence}
+            style={{
+              ...btnBase,
+              borderColor: "rgba(238, 242, 247, 0.28)",
+              background: "rgba(8, 10, 16, 0.88)",
+            }}
+          >
             ← Exit residence
           </button>
         )}
         {(view.mode === "base" || view.mode === "approach") && (
-          <button onClick={returnToMap} style={{ ...btnBase, opacity: 1, pointerEvents: "auto" }}>
+          <button onClick={returnToMap} style={btnBase}>
             ← Return to array
           </button>
         )}
