@@ -9,6 +9,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
+import * as THREE from "three";
 import Moon from "./Moon";
 import OctogramLines from "./OctogramLines";
 import Hotspots from "./Hotspots";
@@ -137,6 +138,15 @@ export default function MapScene() {
         gl={{ antialias: true, powerPreference: "high-performance", logarithmicDepthBuffer: true }}
         dpr={[1, 2]}
         style={{ position: "absolute", inset: 0 }}
+        onCreated={({ gl }) => {
+          // Apply before first frame so SoftShadows-era PCFSoft default never
+          // sticks, and ACES tone mapping is live from paint one.
+          gl.toneMapping = THREE.ACESFilmicToneMapping;
+          gl.toneMappingExposure = 1.15;
+          gl.outputColorSpace = THREE.SRGBColorSpace;
+          gl.shadowMap.enabled = true;
+          gl.shadowMap.type = THREE.PCFShadowMap;
+        }}
       >
         <RendererQuality shadows />
         <color attach="background" args={["#05060a"]} />

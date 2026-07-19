@@ -5,7 +5,7 @@
 
 import { useEffect, useState } from "react";
 import * as THREE from "three";
-import { SoftShadows, ContactShadows } from "@react-three/drei";
+import { ContactShadows } from "@react-three/drei";
 import { HydroponicChannel } from "../parts";
 import { RendererQuality } from "../BaseLighting";
 
@@ -14,7 +14,7 @@ const ACCENT = "#c48aff";
 const GROW = "#7cffc4";
 const PANEL = "#e8e4dc";
 
-function useMap(url: string, repeat: [number, number] = [2, 1.4]) {
+function useMap(url: string, repeatX = 2, repeatY = 1.4) {
   const [tex, setTex] = useState<THREE.Texture | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -22,14 +22,14 @@ function useMap(url: string, repeat: [number, number] = [2, 1.4]) {
       if (cancelled) return;
       t.colorSpace = THREE.SRGBColorSpace;
       t.wrapS = t.wrapT = THREE.RepeatWrapping;
-      t.repeat.set(repeat[0], repeat[1]);
+      t.repeat.set(repeatX, repeatY);
       t.anisotropy = 8;
       setTex(t);
     });
     return () => {
       cancelled = true;
     };
-  }, [url, repeat[0], repeat[1]]);
+  }, [url, repeatX, repeatY]);
   return tex;
 }
 
@@ -107,8 +107,8 @@ function PlantNook({ position }: { position: [number, number, number] }) {
 }
 
 export default function ResidentialInterior() {
-  const wallTex = useMap("/textures/interior-wall.jpg", [2.2, 1.5]);
-  const floorTex = useMap("/textures/interior-floor.jpg", [3, 3]);
+  const wallTex = useMap("/textures/interior-wall.jpg", 2.2, 1.5);
+  const floorTex = useMap("/textures/interior-floor.jpg", 3, 3);
 
   const W = 8.4;
   const D = 7.2;
@@ -117,12 +117,14 @@ export default function ResidentialInterior() {
   return (
     <group>
       <RendererQuality shadows />
-      <SoftShadows size={12} samples={10} focus={0.5} />
       <ambientLight intensity={0.18} color="#ffe8d0" />
       <hemisphereLight args={["#ffe8c8", "#2a2438", 0.35]} />
-      <directionalLight position={[2.5, 4.5, 1.5]} intensity={0.55} color="#ffe8c8" castShadow
-        shadow-mapSize-width={1024}
-        shadow-mapSize-height={1024}
+      <directionalLight
+        position={[2.5, 4.5, 1.5]}
+        intensity={0.55}
+        color="#ffe8c8"
+        castShadow
+        shadow-mapSize={[1024, 1024]}
       />
       <pointLight position={[0, 2.7, 0]} intensity={22} color={WARM} distance={14} decay={2} />
       <pointLight position={[-2.5, 2.3, -1]} intensity={12} color={ACCENT} distance={9} decay={2} />

@@ -1,24 +1,35 @@
 "use client";
 
 // Shared photoreal lighting for local base scenes: warm key sun, cool fill,
-// soft shadows, and additive god-ray shafts. Mount once per exterior base.
+// soft contact shadows, and additive god-ray shafts. Mount once per exterior base.
+//
+// Note: do NOT use @react-three/drei SoftShadows with three r185 — its PCSS
+// shader still calls unpackRGBAToDepth, which was removed, and floods the
+// console with MeshStandardMaterial compile errors.
 
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
-import { SoftShadows, ContactShadows } from "@react-three/drei";
+import { ContactShadows } from "@react-three/drei";
 import * as THREE from "three";
+
+/** Isolated so the immutability linter doesn't treat useThree().gl writes
+ *  as direct hook-value mutation (same pattern as CameraDirector.applyFov). */
+function applyRendererQuality(gl: THREE.WebGLRenderer, shadows: boolean) {
+  gl.toneMapping = THREE.ACESFilmicToneMapping;
+  gl.toneMappingExposure = 1.15;
+  gl.outputColorSpace = THREE.SRGBColorSpace;
+  if (shadows) {
+    gl.shadowMap.enabled = true;
+    // PCFSoftShadowMap is deprecated in r185 — use PCFShadowMap.
+    gl.shadowMap.type = THREE.PCFShadowMap;
+  }
+}
 
 /** Configure the WebGL renderer for ACES filmic tone mapping once per canvas. */
 export function RendererQuality({ shadows = true }: { shadows?: boolean }) {
   const gl = useThree((s) => s.gl);
-  useMemo(() => {
-    gl.toneMapping = THREE.ACESFilmicToneMapping;
-    gl.toneMappingExposure = 1.15;
-    gl.outputColorSpace = THREE.SRGBColorSpace;
-    if (shadows) {
-      gl.shadowMap.enabled = true;
-      gl.shadowMap.type = THREE.PCFSoftShadowMap;
-    }
+  useEffect(() => {
+    applyRendererQuality(gl, shadows);
   }, [gl, shadows]);
   return null;
 }
@@ -48,13 +59,11 @@ function GodRays({
     const ox = origin[0];
     const oy = origin[1];
     const oz = origin[2];
-    // Aim roughly toward scene origin from the key light
     const dir = new THREE.Vector3(-ox, -oy * 0.55, -oz).normalize();
     for (let i = 0; i < count; i++) {
       const spread = (i - (count - 1) / 2) * 0.08;
       const d = dir.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), spread);
       const len = 55 + i * 4;
-      // Cone points +Y by default; aim it along d
       const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d);
       const e = new THREE.Euler().setFromQuaternion(q);
       const mid = new THREE.Vector3(ox, oy, oz).add(d.clone().multiplyScalar(len * 0.45));
@@ -108,22 +117,17 @@ export default function BaseLighting({
   godRays?: boolean;
   contact?: boolean;
 }) {
-  const keyRef = useRef<THREE.DirectionalLight>(null);
-
   return (
     <group>
-      <SoftShadows size={18} samples={12} focus={0.45} />
       <ambientLight intensity={ambient} color="#c8d4e8" />
       <hemisphereLight args={["#b8c8e8", "#3a3428", 0.35]} />
 
       <directionalLight
-        ref={keyRef}
         position={keyPos}
         intensity={keyIntensity}
         color={keyColor}
         castShadow
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
+        shadow-mapSize={[2048, 2048]}
         shadow-camera-near={1}
         shadow-camera-far={140}
         shadow-camera-left={-55}
@@ -134,7 +138,6 @@ export default function BaseLighting({
         shadow-normalBias={0.04}
       />
       <directionalLight position={fillPos} intensity={fillIntensity} color={fillColor} />
-      {/* subtle top bounce */}
       <directionalLight position={[0, 50, 0]} intensity={0.25} color="#e8f0ff" />
 
       {godRays && <GodRays origin={keyPos} color={keyColor} />}
