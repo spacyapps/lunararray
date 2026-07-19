@@ -1,0 +1,2 @@
+# Godot HTML5 export lands here (index.html, .wasm, .pck).
+# Run: godot/lunararray_map/scripts/export_web.sh

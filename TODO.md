@@ -1,94 +1,127 @@
-# LunarArray /map — 3D Base Exploration Enhancement
+# LunarArray Map → Godot 4 Migration
 
 Work locally only. Do not push until Walter asks.
 
-## Phase status
+## Goal
 
-| Phase | Title | Status |
-|-------|--------|--------|
-| 1 | Analyze current /map code & easter eggs | **done** |
-| 2 | Plan unique base designs | **done** |
-| 3 | Camera / view state (smooth approach + enter) | **done** |
-| 4 | LA-08 exterior (sunlight pods, keep domes) | **done** |
-| 5 | Residential interior (wall-top hydroponics) | **done** |
-| 6 | Base uniqueness polish (exteriors) | **done** |
-| 7 | Textures via Grok Imagine | **done** |
-| 8 | Lighting, performance, mobile | **done** |
-| 9 | Test & refine | **done** (build + tsc + eslint clean) |
+Replace (or dual-path) the Three.js `/map` exploration with a **Godot 4** experience:
+photorealistic lunar bases, better perf, HTML5 export embeddable in Next.js.
 
----
+## Architecture
 
-## Phase 1 — Analysis (findings)
-
-### Route & stack
-- Route is **`/map`** (not `/maps`): `app/map/page.tsx` → `MapRoot` → dynamic `MapScene`.
-- Stack: Next.js App Router + `@react-three/fiber` + `@react-three/drei` + `three` (no new deps).
-- Access-gated via `useAccessUnlocked` / RequestAccess.
-
-### Easter egg (kept intact)
-**LA-00** service hatch SW of terminal (`HATCH_POS = [-10,0,8]`):
-1. Click hatch → keypad HTML overlay.
-2. Code = **today’s local date as MMDD** (no UI hint).
-3. Success → `TunnelHologram` subsurface map.
-LA-00 exterior structure and hatch logic were **not** redesigned.
-
----
-
-## What shipped
-
-### Camera / FSM (`view.ts`, `CameraDirector.tsx`, `MapScene.tsx`)
 ```
-map → dive → base ⇄ approach → interior (LA-08) → base → rise → map
+lunararray/                          # existing Next.js app
+├── app/map/page.tsx                 # stays access-gated shell
+├── components/map/
+│   ├── MapRoot.tsx                  # lock screen + embed host
+│   └── GodotMapEmbed.tsx            # NEW: loads exported Godot WASM/HTML
+├── public/godot/                    # Godot HTML5 export output
+│   ├── index.html
+│   ├── lunararray_map.js
+│   ├── lunararray_map.wasm
+│   └── *.pck / assets
+└── godot/lunararray_map/            # NEW: Godot 4 project (source of truth for 3D)
+    ├── project.godot
+    ├── export_presets.cfg
+    ├── scenes/
+    │   ├── main.tscn                # map hub / moon overview
+    │   ├── base_environment.tscn
+    │   ├── bases/LA00…LA08.tscn
+    │   └── interiors/residential.tscn
+    ├── scripts/
+    │   ├── map_camera.gd
+    │   ├── station_data.gd
+    │   ├── base_controller.gd
+    │   └── residential_enter.gd
+    ├── assets/textures/             # Imagine + NASA-style maps (copied/symlinked)
+    └── materials/
 ```
-- **Approach base** / **Wider orbit** (button + key `A`)
-- **Enter residence** on LA-08 (button + key `E`)
-- Esc: interior → base; base/approach → rise → map
-- Fade-through-black on enter/exit so exterior↔interior swaps stay clean
-- Canvas `dpr={[1, 1.75]}` + `powerPreference: high-performance`
 
-### LA-08 exterior
-- Park + outer greenhouse domes kept (hero `dome-glass.jpg` on park + half outer)
-- **SunlightPodRing** at r≈30 (14 pods) and r≈22.5 (8 pods)
-- Atmosphere light shafts, residential portal canopy on plaza
-- Stronger night-city lighting
+**Integration model:** Next.js keeps access gate + UI chrome. Canvas 3D is either:
+1. **Godot HTML5 iframe/embed** (primary path once export works), or
+2. Temporary Three.js fallback until first successful export.
 
-### Residential interior (`bases/interiors/ResidentialInterior.tsx`)
-- Warm apartment bay, lounge, plant nooks, soft sconces
-- Lunar viewport with Earth glow
-- **HydroponicChannel** along wall crowns (no soil, grow-light tubes + foliage)
-- Hero maps: `interior-wall.jpg`, `hydroponic-greenery.jpg`
+## Design requirements (carry over)
 
-### Parts kit
-- `SunlightPod`, `SunlightPodRing`, `HydroponicChannel`
-- `LensDome` optional `imageMap`
+| ID | Requirement |
+|----|-------------|
+| LA-00 | Central hub + **secret hatch easter egg** (MMDD keypad → subsurface hologram) |
+| LA-08 | Sunlight pods on rim, space domes, **enterable** residential apartment |
+| Interior | Wall-top hydroponic vegetation, ceiling artificial sun, digital panels, window view |
+| All | Photoreal PBR, lunar regolith, Earth/Sun disks, smooth camera, approach/enter |
 
-### Textures (`public/textures/`)
-| File | Use |
-|------|-----|
-| `sunlight-pod.jpg` | Collector pod skins |
-| `dome-glass.jpg` | Greenhouse / park domes |
-| `interior-wall.jpg` | Residence walls |
-| `hydroponic-greenery.jpg` | Wall-crown plant cards |
+## Phases
 
-### Light polish
-- LA-01 / LA-03 / LA-07 accent practicals bumped (LA-00 untouched)
+| # | Phase | Status | Notes |
+|---|--------|--------|-------|
+| 0 | Plan + TODO | **done** | This file |
+| 1 | Scaffold Godot 4 project | **done** | project.godot, scenes, scripts |
+| 2 | Core systems | **done** | Camera FSM, station data, environment |
+| 3 | Bases (LA-00 egg, LA-08 pods/domes/enter) | **done** | LA00/LA08 scenes + scripts |
+| 4 | Residential interior | **done** | residential.tscn + residential.gd |
+| 5 | Assets (copy from public/textures) | **done** | assets/textures/* |
+| 6 | Web export pipeline | **done** | export_presets.cfg + export_web.sh |
+| 7 | Next.js embed | **done** | GodotMapEmbed + MapRoot auto-switch |
+| 8 | Install Godot / first HTML5 build | **pending** | Needs `brew install --cask godot` |
+| 9 | Polish + document | **done** | godot/lunararray_map/README.md |
 
-### Verify
-- `tsc --noEmit` clean
-- `eslint components/map` clean
-- `npm run build` success
+## Godot requirement
 
----
+Godot **is not currently installed** on this machine. Phase 8 needs either:
 
-## How to try it
-1. Unlock access (Request Access on site or prior unlock).
-2. Open `/map`, click **LA-08 Imbrium**.
-3. **Approach base** → closer exterior orbit.
-4. **Enter residence** → apartment with wall-top gardens.
-5. Esc / **Exit residence** → back to exterior; **Return to array** → moon map.
-6. LA-00 hatch easter egg still works as before (MMDD).
+```bash
+# macOS (user installs)
+brew install --cask godot
+# or download Godot 4.3+ from https://godotengine.org/download
+```
 
-## Optional next (not in this pass)
-- Free look OrbitControls on base (currently cinematic + approach zoom)
-- Enter interiors for other house bases
-- Redesign LA-00 surface (keep hatch lore)
+Export templates for **Web** must be installed once in the editor  
+(Editor → Manage Export Templates) or via:
+
+```bash
+godot --headless --export-release "Web" public/godot/index.html
+```
+
+## Camera FSM (mirror Three.js)
+
+```
+map → dive → base ⇄ approach → interior → base → rise → map
+```
+
+- Map: orbit moon / select station  
+- Dive: cinematic fly-in  
+- Base: auto-orbit + free look  
+- Approach: tighter framing  
+- Interior: LA-08 residence only  
+- Esc / UI: step back one level  
+
+## Performance targets (Web)
+
+- 60fps desktop, 30fps+ mid mobile where possible  
+- Baked / limited real-time lights  
+- Texture size caps (1024–2048)  
+- LOD for distant bases  
+- Single environment + WorldEnvironment for ACES-like tone  
+
+## Execution notes
+
+- Keep Three.js map **working** until Godot embed is verified  
+- Reuse `public/textures/*` (copy into `godot/.../assets/textures`)  
+- Do not push; Walter pushes  
+- Ask before: new npm deps, brew install Godot, force-push  
+
+## Phase summaries (filled as we go)
+
+### Phase 0
+Plan written; architecture is Next shell + Godot HTML5 embed + `godot/lunararray_map` source.
+
+### Phase 1–7 (scaffold + embed)
+Godot project under `godot/lunararray_map/` with main map, LA-00 (hatch MMDD), LA-08 (pods/domes/portal), residential interior, camera FSM, texture assets, Web export preset, and Next.js embed (`GodotMapEmbed` + auto fallback to Three.js).
+
+### Phase 8 (your machine)
+```bash
+brew install --cask godot
+# open godot/lunararray_map once → install Web export templates
+./godot/lunararray_map/scripts/export_web.sh
+npm run dev   # /map uses Godot when public/godot/index.html exists
+```
