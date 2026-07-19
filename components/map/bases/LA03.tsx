@@ -138,8 +138,9 @@ export default function LA03() {
   return (
     <group>
       {/* hot amber key raking across the pit, cool bounce */}
-      <directionalLight position={[-30, 12, -26]} intensity={2.5} color="#ffcf8a" />
-      <directionalLight position={[28, 8, 30]} intensity={0.7} color="#8ab4ff" />
+      <directionalLight position={[-30, 12, -26]} intensity={2.7} color="#ffcf8a" />
+      <directionalLight position={[28, 8, 30]} intensity={0.85} color="#8ab4ff" />
+      <pointLight position={[-24, 5, 2]} intensity={28} color={ORE} distance={20} />
 
       <BaseEnvironment groundColor="#7e7668" rockTint="#6a6254" seed={3} />
 

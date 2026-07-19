@@ -34,9 +34,10 @@ export default function LA07() {
   return (
     <group>
       {/* sunset key raking in from the built west, cool night fill east */}
-      <directionalLight position={[-44, 10, 8]} intensity={2.6} color="#ff9e6a" />
-      <directionalLight position={[36, 14, -26]} intensity={0.8} color="#6a7ab6" />
-      <pointLight position={[-14, 8, 0]} intensity={55} color={WARM} distance={28} />
+      <directionalLight position={[-44, 10, 8]} intensity={2.75} color="#ff9e6a" />
+      <directionalLight position={[36, 14, -26]} intensity={0.95} color="#6a7ab6" />
+      <pointLight position={[-14, 8, 0]} intensity={62} color={WARM} distance={30} />
+      <pointLight position={[-9, 5, 6]} intensity={22} color={ACCENT} distance={20} />
 
       <BaseEnvironment groundColor="#7a7484" rockTint="#686270" seed={7} />
 

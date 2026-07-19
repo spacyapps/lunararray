@@ -1,11 +1,12 @@
 "use client";
 
 // Drives the camera through the view state machine:
-//   map  — OrbitControls own the camera (this component idles)
-//   dive — fly from wherever the camera is down toward the clicked station,
-//          fading to black over the last stretch, then hand off to "base"
-//   base — slow cinematic orbit around the local base scene at the origin
-//   rise — fade out, restore the map camera pulling back from the station
+//   map       — OrbitControls own the camera (this component idles)
+//   dive      — fly from wherever the camera is down toward the clicked station
+//   base      — slow cinematic orbit around the local base scene at origin
+//   approach  — ease from orbit to a tighter exterior framing, then keep orbiting
+//   interior  — room-scale orbit inside a residential bay (enterable stations)
+//   rise      — fade out, restore the map camera pulling back from the station
 //
 // The fade layer is a DOM element mutated directly (no per-frame setState).
 
@@ -18,27 +19,26 @@ import {
   View,
   DIVE_DUR,
   RISE_DUR,
+  APPROACH_DUR,
+  ENTER_DUR,
+  EXIT_INTERIOR_DUR,
   easeInOut,
   DEFAULT_ORBIT,
+  DEFAULT_APPROACH,
+  DEFAULT_INTERIOR,
   OrbitSpec,
+  ApproachSpec,
+  InteriorSpec,
   MAP_CAM_POS,
   MAP_FOV,
   DEEP_LINK_HOLD,
   DEEP_LINK_REVEAL,
 } from "./view";
-import { ORBITS } from "./bases/orbits";
+import { APPROACHES, INTERIORS, ORBITS } from "./bases/orbits";
 
 const MAP_CAM = new THREE.Vector3(...MAP_CAM_POS);
-// Extra beat at full black after the dive animation completes, before
-// handing off to "base" mode — cheap insurance against any one-frame
-// discontinuity (camera snap, React re-render timing) landing visibly.
 const ARRIVAL_HOLD = 0.15;
 
-/** Isolated from CameraDirector's render scope so the compiler's hook-value
- *  immutability check doesn't see this as a direct write to the `camera`
- *  returned by useThree — same underlying mutation as the position/lookAt
- *  calls already used throughout, just on a property three.js has no
- *  dedicated setter method for. */
 function applyFov(cam: THREE.PerspectiveCamera, fov: number) {
   cam.fov = fov;
   cam.updateProjectionMatrix();
@@ -50,30 +50,51 @@ function stationWorld(id: string): THREE.Vector3 {
   return new THREE.Vector3(...latLonToVec3(lat, lon, MOON_RADIUS));
 }
 
-/** Camera resting point just above a station on the globe (dive endpoint). */
 function divePoint(id: string): THREE.Vector3 {
   return stationWorld(id).clone().multiplyScalar(1 + 0.32 / MOON_RADIUS);
+}
+
+function orbitPose(spec: OrbitSpec | ApproachSpec, t: number, a0 = -Math.PI / 3) {
+  const ang = a0 + (t / spec.period) * Math.PI * 2;
+  const h = spec.height + Math.sin(t * 0.21) * spec.height * 0.18;
+  return {
+    pos: new THREE.Vector3(Math.cos(ang) * spec.radius, h, Math.sin(ang) * spec.radius),
+    focusY: spec.focusHeight,
+  };
+}
+
+function interiorPose(spec: InteriorSpec, t: number) {
+  const ang = (t / spec.period) * Math.PI * 2 + Math.PI * 0.15;
+  const breath = Math.sin(t * 0.18) * 0.12;
+  const pos = new THREE.Vector3(
+    Math.cos(ang) * (spec.radius + breath),
+    spec.height + Math.sin(t * 0.15) * 0.15,
+    Math.sin(ang) * (spec.radius + breath),
+  );
+  const focus = new THREE.Vector3(...spec.focus);
+  return { pos, focus };
 }
 
 export default function CameraDirector({
   view,
   onArrived,
   onReturned,
+  onApproachSettled,
+  onInteriorSettled,
   fadeRef,
   deepLink = false,
 }: {
   view: View;
   onArrived: () => void;
   onReturned: () => void;
+  /** After approach transition lands — parent keeps mode as "approach". */
+  onApproachSettled?: () => void;
+  /** After enter/exit interior transition lands. */
+  onInteriorSettled?: (mode: "interior" | "base") => void;
   fadeRef: React.RefObject<HTMLDivElement | null>;
-  /** True when `view`'s initial dive came from the landing page's
-   *  ?station=ID deep link rather than a hotspot click already on /map. */
   deepLink?: boolean;
 }) {
   const camera = useThree((s) => s.camera);
-  // `fired` guards the completion callback: the state flip is async, so the
-  // frame loop can run again while the old mode is still current — clearing
-  // the record there would restart the animation from its first frame.
   const anim = useRef<{
     key: string;
     t0: number;
@@ -85,12 +106,12 @@ export default function CameraDirector({
     holdStart?: number;
   } | null>(null);
   const baseT0 = useRef<number | null>(null);
+  const approachT0 = useRef<number | null>(null);
+  const interiorT0 = useRef<number | null>(null);
   const focus = useRef(new THREE.Vector3());
-  // The hold only applies to the very first dive (the deep-linked one) — a
-  // later hotspot click after returning to the map is already warm and
-  // shouldn't pay it again, even though the `deepLink` prop itself doesn't
-  // change across the session.
   const deepLinkConsumed = useRef(false);
+  // Preserve orbit phase when switching base ⇄ approach so the cut doesn't spin.
+  const phaseOffset = useRef(0);
 
   const setFade = (v: number) => {
     if (fadeRef.current) fadeRef.current.style.opacity = String(Math.min(1, Math.max(0, v)));
@@ -98,33 +119,27 @@ export default function CameraDirector({
 
   useFrame(({ clock }) => {
     const now = clock.getElapsedTime();
+    const pCam = camera as THREE.PerspectiveCamera;
 
     if (view.mode === "map") {
       anim.current = null;
       baseT0.current = null;
+      approachT0.current = null;
+      interiorT0.current = null;
+      if (pCam.fov !== MAP_FOV) applyFov(pCam, MAP_FOV);
       return;
     }
 
     if (view.mode === "dive") {
       const key = `dive-${view.id}`;
-      const pCam = camera as THREE.PerspectiveCamera;
       const holdThisDive = deepLink && !deepLinkConsumed.current;
       if (anim.current?.key !== key) {
         deepLinkConsumed.current = true;
         anim.current = {
           key,
-          // Deep link: push the dive's own t0 into the future by the hold
-          // duration. Until then we sit at full black without touching the
-          // camera at all, so first-mount generation (moon texture,
-          // hotspots, starfield) finishes with nothing on screen to flash.
           t0: now + (holdThisDive ? DEEP_LINK_HOLD : 0),
           fromPos: camera.position.clone(),
           fromFocus: new THREE.Vector3(0, 0, 0),
-          // A deep link from the landing page starts the Canvas at the
-          // embedded preview's (narrower) fov instead of the map's own —
-          // ease it back to the standard map fov over the dive so a normal
-          // in-page dive (already at MAP_FOV) is a no-op, and a deep-linked
-          // one lands at the same framing base/rise/map always use.
           fromFov: pCam.fov,
           held: holdThisDive,
         };
@@ -144,9 +159,6 @@ export default function CameraDirector({
       if (a.fromFov !== MAP_FOV) {
         applyFov(pCam, THREE.MathUtils.lerp(a.fromFov, MAP_FOV, e));
       }
-      // reveal from the hold (deep link only — false for a normal in-page
-      // dive, so it never affects the existing end-of-dive fade below) and
-      // fade to black over the last stretch of the dive
       const revealFade = a.held ? 1 - Math.min(1, (now - a.t0) / DEEP_LINK_REVEAL) : 0;
       const endFade = (t - 0.72) / 0.28;
       setFade(Math.max(revealFade, endFade));
@@ -161,22 +173,143 @@ export default function CameraDirector({
     }
 
     if (view.mode === "base") {
+      // Leaving interior: fade through black, then resume exterior orbit.
+      const exiting =
+        anim.current?.key === `enter-interior-${view.id}` ||
+        anim.current?.key === `exit-interior-${view.id}`;
+      if (exiting) {
+        if (anim.current!.key !== `exit-interior-${view.id}`) {
+          anim.current = {
+            key: `exit-interior-${view.id}`,
+            t0: now,
+            fromPos: camera.position.clone(),
+            fromFocus: focus.current.clone(),
+            fromFov: pCam.fov,
+            held: false,
+          };
+          setFade(1);
+        }
+        const a = anim.current!;
+        const t = Math.min(1, (now - a.t0) / EXIT_INTERIOR_DUR);
+        const e = easeInOut(t);
+        const spec: OrbitSpec = ORBITS[view.id] ?? DEFAULT_ORBIT;
+        if (baseT0.current === null) baseT0.current = now;
+        const orbitT = now - baseT0.current + phaseOffset.current;
+        const pose = orbitPose(spec, orbitT);
+        // Hold black while exterior remounts mid-transition.
+        if (t < 0.4) {
+          setFade(1);
+        } else {
+          camera.position.lerpVectors(a.fromPos, pose.pos, (e - 0.4) / 0.6);
+          focus.current.set(0, pose.focusY, 0);
+          camera.lookAt(focus.current);
+          applyFov(pCam, THREE.MathUtils.lerp(a.fromFov, MAP_FOV, (t - 0.4) / 0.6));
+          setFade(1 - (t - 0.4) / 0.6);
+        }
+        if (t >= 1 && !a.fired) {
+          a.fired = true;
+          anim.current = null;
+          onInteriorSettled?.("base");
+        }
+        return;
+      }
+
       anim.current = null;
+      approachT0.current = null;
+      interiorT0.current = null;
       const spec: OrbitSpec = ORBITS[view.id] ?? DEFAULT_ORBIT;
       if (baseT0.current === null) baseT0.current = now;
-      const t = now - baseT0.current;
-      // fade back in over the first beat
-      setFade(1 - t / 0.9);
-      const a0 = -Math.PI / 3;
-      const ang = a0 + (t / spec.period) * Math.PI * 2;
-      // gentle vertical breathing so the orbit doesn't feel like a turntable
-      const h = spec.height + Math.sin(t * 0.21) * spec.height * 0.18;
-      camera.position.set(
-        Math.cos(ang) * spec.radius,
-        h,
-        Math.sin(ang) * spec.radius,
-      );
-      camera.lookAt(0, spec.focusHeight, 0);
+      const t = now - baseT0.current + phaseOffset.current;
+      // Only run the arrival fade-in on the first beats after a dive.
+      const sinceBase = now - baseT0.current;
+      if (sinceBase < 1) setFade(1 - sinceBase / 0.9);
+      else setFade(0);
+      const pose = orbitPose(spec, t);
+      camera.position.copy(pose.pos);
+      camera.lookAt(0, pose.focusY, 0);
+      if (pCam.fov !== MAP_FOV) applyFov(pCam, MAP_FOV);
+      return;
+    }
+
+    if (view.mode === "approach") {
+      const spec: ApproachSpec = APPROACHES[view.id] ?? DEFAULT_APPROACH;
+      const key = `approach-${view.id}`;
+      if (anim.current?.key !== key) {
+        // Capture current phase from base orbit so we continue smoothly.
+        if (baseT0.current !== null) {
+          phaseOffset.current = now - baseT0.current + phaseOffset.current;
+        }
+        baseT0.current = null;
+        anim.current = {
+          key,
+          t0: now,
+          fromPos: camera.position.clone(),
+          fromFocus: focus.current.clone().set(0, (ORBITS[view.id] ?? DEFAULT_ORBIT).focusHeight, 0),
+          fromFov: pCam.fov,
+          held: false,
+        };
+        approachT0.current = now;
+      }
+      const a = anim.current;
+      const orbitT = now - (approachT0.current ?? now) + phaseOffset.current;
+      const targetPose = orbitPose(spec, orbitT);
+      const t = Math.min(1, (now - a.t0) / APPROACH_DUR);
+      const e = easeInOut(t);
+      if (t < 1) {
+        camera.position.lerpVectors(a.fromPos, targetPose.pos, e);
+        focus.current.lerpVectors(a.fromFocus, new THREE.Vector3(0, targetPose.focusY, 0), e);
+        camera.lookAt(focus.current);
+      } else {
+        camera.position.copy(targetPose.pos);
+        camera.lookAt(0, targetPose.focusY, 0);
+        if (!a.fired) {
+          a.fired = true;
+          onApproachSettled?.();
+        }
+      }
+      setFade(0);
+      return;
+    }
+
+    if (view.mode === "interior") {
+      const ispec: InteriorSpec = INTERIORS[view.id] ?? DEFAULT_INTERIOR;
+      const key = `enter-interior-${view.id}`;
+      if (anim.current?.key !== key) {
+        anim.current = {
+          key,
+          t0: now,
+          fromPos: camera.position.clone(),
+          fromFocus: new THREE.Vector3(0, (APPROACHES[view.id] ?? DEFAULT_APPROACH).focusHeight, 0),
+          fromFov: pCam.fov,
+          held: false,
+        };
+        interiorT0.current = now;
+        setFade(1);
+      }
+      const a = anim.current;
+      const roomT = now - (interiorT0.current ?? now);
+      const target = interiorPose(ispec, roomT);
+      const t = Math.min(1, (now - a.t0) / ENTER_DUR);
+      const e = easeInOut(t);
+      if (t < 1) {
+        // Hold black mid-enter so the exterior unmount / interior mount isn't visible.
+        camera.position.lerpVectors(a.fromPos, target.pos, e);
+        focus.current.lerpVectors(a.fromFocus, target.focus, e);
+        camera.lookAt(focus.current);
+        applyFov(pCam, THREE.MathUtils.lerp(a.fromFov, ispec.fov, e));
+        // Fade: full black until mid, then reveal interior.
+        if (t < 0.45) setFade(1);
+        else setFade(1 - (t - 0.45) / 0.55);
+      } else {
+        camera.position.copy(target.pos);
+        camera.lookAt(target.focus);
+        applyFov(pCam, ispec.fov);
+        setFade(0);
+        if (!a.fired) {
+          a.fired = true;
+          onInteriorSettled?.("interior");
+        }
+      }
       return;
     }
 
@@ -184,6 +317,8 @@ export default function CameraDirector({
       const key = `rise-${view.id}`;
       if (anim.current?.key !== key) {
         baseT0.current = null;
+        approachT0.current = null;
+        interiorT0.current = null;
         anim.current = {
           key,
           t0: now,
@@ -192,7 +327,6 @@ export default function CameraDirector({
           fromFov: MAP_FOV,
           held: false,
         };
-        // camera snaps back above the station behind a fade already at black
         setFade(1);
       }
       const a = anim.current;
@@ -201,10 +335,10 @@ export default function CameraDirector({
       camera.position.lerpVectors(a.fromPos, MAP_CAM, e);
       focus.current.lerpVectors(a.fromFocus, new THREE.Vector3(0, 0, 0), Math.min(1, e * 1.4));
       camera.lookAt(focus.current);
+      if (pCam.fov !== MAP_FOV) applyFov(pCam, MAP_FOV);
       setFade(1 - t / 0.3);
       if (t >= 1 && !a.fired) {
         a.fired = true;
-        // land exactly on the map pose before OrbitControls remounts
         camera.position.copy(MAP_CAM);
         camera.lookAt(0, 0, 0);
         onReturned();

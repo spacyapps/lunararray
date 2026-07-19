@@ -389,6 +389,7 @@ export function LensDome({
   color = "#aef0ff",
   opacity = 0.85,
   emissive,
+  imageMap,
   ...props
 }: {
   r?: number;
@@ -396,18 +397,35 @@ export function LensDome({
   color?: string;
   opacity?: number;
   emissive?: string;
+  /** Optional hero glass map (e.g. Grok Imagine under public/textures/). */
+  imageMap?: string;
 } & ThreeElements["group"]) {
   const bump = useMemo(() => {
     const tex = new THREE.CanvasTexture(buildDomeBump());
     tex.anisotropy = 4;
     return tex;
   }, []);
+  const [imageTexture, setImageTexture] = useState<THREE.Texture | null>(null);
+  useEffect(() => {
+    if (!imageMap) return;
+    let cancelled = false;
+    new THREE.TextureLoader().load(imageMap, (tex) => {
+      if (cancelled) return;
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = 4;
+      setImageTexture(tex);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [imageMap]);
   return (
     <group {...props}>
       <mesh scale={[1, squash, 1]}>
         <sphereGeometry args={[r, 48, 24, 0, Math.PI * 2, 0, Math.PI / 2]} />
         <meshStandardMaterial
           color={color}
+          map={imageTexture ?? undefined}
           transparent
           opacity={opacity}
           roughness={0.15}
@@ -852,6 +870,218 @@ export function WindowBand({
 export function teardropRadiusAt(height: number, radius: number, y: number): number {
   const u = Math.min(1, Math.max(0, y / height));
   return radius * Math.sin(Math.PI * Math.pow(u, 0.62)) * (1 - u * 0.12) + 0.04;
+}
+
+/** Pod-like sunlight collector: translucent lens on a slender mast, optional
+ *  hero imageMap for the collector skin. Used on LA-08's outer rim. */
+export function SunlightPod({
+  scale = 1,
+  accent = "#c48aff",
+  warm = "#ffd9a0",
+  imageMap = "/textures/sunlight-pod.jpg",
+  ...props
+}: {
+  scale?: number;
+  accent?: string;
+  warm?: string;
+  imageMap?: string;
+} & ThreeElements["group"]) {
+  const [tex, setTex] = useState<THREE.Texture | null>(null);
+  useEffect(() => {
+    if (!imageMap) return;
+    let cancelled = false;
+    new THREE.TextureLoader().load(imageMap, (t) => {
+      if (cancelled) return;
+      t.colorSpace = THREE.SRGBColorSpace;
+      t.anisotropy = 4;
+      setTex(t);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [imageMap]);
+  const glow = useRef<THREE.MeshBasicMaterial>(null);
+  useFrame(({ clock }) => {
+    if (glow.current) {
+      glow.current.opacity = 0.35 + 0.25 * (0.5 + 0.5 * Math.sin(clock.getElapsedTime() * 1.1));
+    }
+  });
+  return (
+    <group {...props} scale={scale}>
+      {/* mast */}
+      <mesh position={[0, 1.1, 0]}>
+        <cylinderGeometry args={[0.06, 0.12, 2.2, 8]} />
+        <meshToonMaterial color="#c8ccd8" />
+      </mesh>
+      {/* gimbal collar */}
+      <mesh position={[0, 2.25, 0]} rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[0.28, 0.05, 8, 20]} />
+        <meshStandardMaterial color="#9aa0b4" metalness={0.55} roughness={0.35} />
+      </mesh>
+      {/* collector pod — flattened teardrop / capsule lens aimed skyward */}
+      <group position={[0, 2.85, 0]} rotation={[0.35, 0, 0.15]}>
+        <mesh scale={[1, 1.35, 0.72]}>
+          <sphereGeometry args={[0.55, 24, 18]} />
+          <meshStandardMaterial
+            color="#f2e8ff"
+            map={tex ?? undefined}
+            transparent
+            opacity={0.82}
+            roughness={0.22}
+            metalness={0.25}
+            emissive={warm}
+            emissiveIntensity={0.28}
+          />
+        </mesh>
+        {/* inner solar wafer */}
+        <mesh position={[0, 0.08, 0]} scale={[0.72, 0.9, 0.45]}>
+          <sphereGeometry args={[0.42, 16, 12]} />
+          <meshBasicMaterial ref={glow} color={accent} transparent opacity={0.45} />
+        </mesh>
+        {/* rim ring */}
+        <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, -0.05, 0]}>
+          <torusGeometry args={[0.52, 0.035, 8, 28]} />
+          <meshBasicMaterial color={accent} />
+        </mesh>
+      </group>
+      <pointLight position={[0, 3.1, 0]} intensity={4 * scale} color={warm} distance={6 * scale} />
+    </group>
+  );
+}
+
+/** Ring of sunlight pods around a radius — rim collectors for a residential base. */
+export function SunlightPodRing({
+  radius = 28,
+  count = 12,
+  accent = "#c48aff",
+  y = 0,
+  scale = 1,
+  phase = 0.15,
+}: {
+  radius?: number;
+  count?: number;
+  accent?: string;
+  y?: number;
+  scale?: number;
+  phase?: number;
+}) {
+  return (
+    <group>
+      {Array.from({ length: count }).map((_, i) => {
+        const a = (i / count) * Math.PI * 2 + phase;
+        const s = scale * (0.85 + seedRand(i * 17 + 4) * 0.35);
+        return (
+          <SunlightPod
+            key={i}
+            accent={accent}
+            scale={s}
+            position={[Math.cos(a) * radius, y, Math.sin(a) * radius]}
+            rotation={[0, -a + Math.PI / 2, 0]}
+          />
+        );
+      })}
+    </group>
+  );
+}
+
+/** Wall-top hydroponic channel: glowing tube + leafy clusters, no soil.
+ *  Oriented along local +X; place with position/rotation on a wall crown. */
+export function HydroponicChannel({
+  length = 6,
+  accent = "#7cffc4",
+  grow = "#c48aff",
+  imageMap = "/textures/hydroponic-greenery.jpg",
+  ...props
+}: {
+  length?: number;
+  accent?: string;
+  grow?: string;
+  imageMap?: string;
+} & ThreeElements["group"]) {
+  const [leafTex, setLeafTex] = useState<THREE.Texture | null>(null);
+  useEffect(() => {
+    if (!imageMap) return;
+    let cancelled = false;
+    new THREE.TextureLoader().load(imageMap, (t) => {
+      if (cancelled) return;
+      t.colorSpace = THREE.SRGBColorSpace;
+      t.wrapS = THREE.RepeatWrapping;
+      t.wrapT = THREE.ClampToEdgeWrapping;
+      t.repeat.set(Math.max(1, length / 3), 1);
+      t.anisotropy = 4;
+      setLeafTex(t);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [imageMap, length]);
+
+  const plants = useMemo(() => {
+    const n = Math.max(4, Math.round(length * 1.4));
+    const list: { x: number; h: number; s: number; lean: number }[] = [];
+    for (let i = 0; i < n; i++) {
+      list.push({
+        x: -length / 2 + ((i + 0.5) / n) * length + (seedRand(i * 9 + 2) - 0.5) * 0.15,
+        h: 0.35 + seedRand(i * 5 + 1) * 0.55,
+        s: 0.12 + seedRand(i * 7 + 3) * 0.1,
+        lean: (seedRand(i * 11) - 0.5) * 0.35,
+      });
+    }
+    return list;
+  }, [length]);
+
+  return (
+    <group {...props}>
+      {/* channel trough */}
+      <mesh position={[0, 0, 0]}>
+        <boxGeometry args={[length, 0.12, 0.28]} />
+        <meshStandardMaterial color="#2a3040" metalness={0.4} roughness={0.45} />
+      </mesh>
+      {/* hydro tube */}
+      <mesh position={[0, 0.08, 0]} rotation={[0, 0, Math.PI / 2]}>
+        <cylinderGeometry args={[0.045, 0.045, length * 0.96, 10]} />
+        <meshStandardMaterial
+          color={accent}
+          emissive={accent}
+          emissiveIntensity={0.55}
+          roughness={0.3}
+        />
+      </mesh>
+      {/* soft grow light strip */}
+      <mesh position={[0, 0.14, 0.12]}>
+        <boxGeometry args={[length * 0.94, 0.03, 0.04]} />
+        <meshBasicMaterial color={grow} transparent opacity={0.7} />
+      </mesh>
+      <pointLight position={[0, 0.2, 0]} intensity={3} color={grow} distance={length * 0.7} />
+
+      {/* leafy clusters — simple organic blobs + textured card faces */}
+      {plants.map((p, i) => (
+        <group key={i} position={[p.x, 0.12 + p.h * 0.35, 0]} rotation={[0, 0, p.lean]}>
+          <mesh scale={[p.s * 1.4, p.h, p.s]}>
+            <sphereGeometry args={[1, 10, 8]} />
+            <meshStandardMaterial
+              color={i % 3 === 0 ? "#5ecf8a" : i % 3 === 1 ? "#3aa86a" : "#7ae0a8"}
+              roughness={0.85}
+              emissive="#1a5030"
+              emissiveIntensity={0.15}
+            />
+          </mesh>
+          {leafTex && (
+            <mesh position={[0, p.h * 0.15, 0.08]} scale={[p.s * 3.2, p.h * 1.1, 1]}>
+              <planeGeometry />
+              <meshBasicMaterial
+                map={leafTex}
+                transparent
+                opacity={0.85}
+                side={THREE.DoubleSide}
+                depthWrite={false}
+              />
+            </mesh>
+          )}
+        </group>
+      ))}
+    </group>
+  );
 }
 
 /** Deterministic pseudo-random, shared convention across the map. */

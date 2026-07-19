@@ -102,10 +102,12 @@ function GateArch(props: { position: [number, number, number]; rotation?: [numbe
 export default function LA01() {
   return (
     <group>
-      {/* dusk key — warm low sun, violet fill */}
-      <directionalLight position={[-34, 10, 30]} intensity={2.4} color="#ffc890" />
-      <directionalLight position={[36, 16, -30]} intensity={1.2} color="#9a8aff" />
-      <pointLight position={[0, 5, 2]} intensity={28} color={WARM} distance={26} />
+      {/* dusk key — warm low sun, violet fill, amber gate practicals */}
+      <directionalLight position={[-34, 10, 30]} intensity={2.55} color="#ffc890" />
+      <directionalLight position={[36, 16, -30]} intensity={1.35} color="#9a8aff" />
+      <pointLight position={[0, 5, 2]} intensity={34} color={WARM} distance={28} />
+      <pointLight position={[-16, 4, -4]} intensity={16} color={ACCENT} distance={18} />
+      <pointLight position={[18, 4, 2]} intensity={16} color={ACCENT} distance={18} />
 
       <BaseEnvironment groundColor="#8a8496" rockTint="#746e82" seed={1} />
 

@@ -1,8 +1,8 @@
 "use client";
 
 // Root R3F scene for the LunarArray map.
-// View flow: high-level moon map → click a hotspot → dive to that base's
-// local scene (slow cinematic orbit) → Esc / "Return to array" flies back.
+// View flow: high-level moon map → dive → base orbit ⇄ approach →
+// (LA-08) interior → rise back to map.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
@@ -15,7 +15,7 @@ import Hotspots from "./Hotspots";
 import Starfield3D from "./Starfield3D";
 import CameraDirector from "./CameraDirector";
 import BaseScene from "./bases/BaseScene";
-import { View, EMBED_CAM_POS, EMBED_FOV, MAP_CAM_POS, MAP_FOV } from "./view";
+import { View, EMBED_CAM_POS, EMBED_FOV, MAP_CAM_POS, MAP_FOV, canEnter } from "./view";
 import { STATIONS } from "@/lib/stations";
 
 const mono: React.CSSProperties = {
@@ -23,9 +23,19 @@ const mono: React.CSSProperties = {
   textTransform: "uppercase",
 };
 
+const btnBase: React.CSSProperties = {
+  ...mono,
+  fontSize: 10.5,
+  letterSpacing: "0.26em",
+  color: "var(--ink)",
+  background: "rgba(238, 242, 247, 0.06)",
+  border: "1px solid rgba(238, 242, 247, 0.18)",
+  padding: "10px 16px",
+  cursor: "pointer",
+  transition: "opacity 300ms ease, border-color 200ms ease, background 200ms ease",
+};
+
 export default function MapScene() {
-  // Deep link from the landing page's embedded preview: /map?station=LA-03
-  // jumps straight into that base's dive-in on load instead of the map view.
   const searchParams = useSearchParams();
   const requestedStation = searchParams.get("station");
   const isDeepLink = !!requestedStation && STATIONS.some((s) => s.id === requestedStation);
@@ -39,42 +49,88 @@ export default function MapScene() {
   const active = STATIONS.find((s) => s.id === activeId) ?? null;
   const hovered = STATIONS.find((s) => s.id === hoveredId) ?? null;
   const onMap = view.mode === "map";
-  const showMapWorld = view.mode !== "base";
-  const mountBase = view.mode === "dive" || view.mode === "base";
+  const showMapWorld = view.mode !== "base" && view.mode !== "approach" && view.mode !== "interior";
+  const mountBase =
+    view.mode === "dive" ||
+    view.mode === "base" ||
+    view.mode === "approach" ||
+    view.mode === "interior";
+  const showInterior = view.mode === "interior";
+  const enterable = activeId ? canEnter(activeId) : false;
 
   const returnToMap = useCallback(() => {
-    setView((v) => (v.mode === "base" ? { mode: "rise", id: v.id } : v));
+    setView((v) => {
+      if (v.mode === "interior") return { mode: "base", id: v.id };
+      if (v.mode === "approach" || v.mode === "base") return { mode: "rise", id: v.id };
+      return v;
+    });
+  }, []);
+
+  const approachBase = useCallback(() => {
+    setView((v) => {
+      if (v.mode === "base") return { mode: "approach", id: v.id };
+      if (v.mode === "approach") return { mode: "base", id: v.id };
+      return v;
+    });
+  }, []);
+
+  const enterResidence = useCallback(() => {
+    // Black out before the exterior unmounts so the swap never flashes.
+    if (fadeRef.current) fadeRef.current.style.opacity = "1";
+    setView((v) => {
+      if ((v.mode === "base" || v.mode === "approach") && canEnter(v.id)) {
+        return { mode: "interior", id: v.id };
+      }
+      return v;
+    });
+  }, []);
+
+  const exitResidence = useCallback(() => {
+    if (fadeRef.current) fadeRef.current.style.opacity = "1";
+    setView((v) => (v.mode === "interior" ? { mode: "base", id: v.id } : v));
   }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") returnToMap();
+      if (e.key === "Escape") {
+        if (view.mode === "interior") exitResidence();
+        else returnToMap();
+      }
+      if (e.key === "e" || e.key === "E") {
+        if (view.mode === "interior") exitResidence();
+        else if (enterable && (view.mode === "base" || view.mode === "approach")) enterResidence();
+      }
+      if (e.key === "a" || e.key === "A") {
+        if (view.mode === "base" || view.mode === "approach") approachBase();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [returnToMap]);
+  }, [view.mode, enterable, returnToMap, approachBase, enterResidence, exitResidence]);
 
-  // Label: hovered station on the map, active station during dive/orbit.
   const labelStation = onMap ? hovered : active;
+
+  const statusLine = (() => {
+    if (onMap) return "9 nodes · Near side · Octogram";
+    if (view.mode === "interior") return "Residence · Esc to exit";
+    if (view.mode === "approach") return "Close approach · A pull back · Esc array";
+    if (view.mode === "base") return "Station orbit · A approach · Esc array";
+    return "On approach";
+  })();
 
   return (
     <>
       <Canvas
-        // Deep-linked from the landing page's embedded preview: start at that
-        // preview's camera pose instead of the full-map default, so the page
-        // transition reads as one continuous zoom (CameraDirector eases both
-        // position and fov back to the standard map framing over the dive).
         camera={{ position: isDeepLink ? EMBED_CAM_POS : MAP_CAM_POS, fov: isDeepLink ? EMBED_FOV : MAP_FOV }}
-        gl={{ antialias: true }}
+        gl={{ antialias: true, powerPreference: "high-performance" }}
+        dpr={[1, 1.75]}
         style={{ position: "absolute", inset: 0 }}
       >
         <color attach="background" args={["#05060a"]} />
-        <ambientLight intensity={0.18} />
-        <Starfield3D />
+        <ambientLight intensity={showInterior ? 0 : 0.18} />
+        {!showInterior && <Starfield3D />}
 
-        {/* High-level moon map */}
         <group visible={showMapWorld}>
-          {/* Anime key lighting: warm key upper-left, cyan back rim */}
           <directionalLight position={[-6, 4, 5]} intensity={2.2} color="#fff4e0" />
           <directionalLight position={[7, -2, -4]} intensity={1.1} color="#5cd6ff" />
           <Moon />
@@ -90,18 +146,15 @@ export default function MapScene() {
           />
         </group>
 
-        {/* Local base scene (origin), mounted from dive so it's warm on
-            arrival. Scaled to ~0 rather than hidden via `visible` — an
-            invisible object is skipped by the renderer entirely, so its
-            shaders/textures never actually compile/upload until the frame
-            it's revealed, which is exactly the stall that caused the flash.
-            Scaled tiny, it still renders every frame (paying that cost
-            during the 2.4s dive instead), and sits buried inside the opaque
-            moon anyway — both share the world origin — so there's nothing
-            to see even at scale=1 the moment it starts warming. */}
         {mountBase && active && (
-          <group scale={view.mode === "base" ? 1 : 0.001}>
-            <BaseScene station={active} />
+          <group
+            scale={
+              view.mode === "base" || view.mode === "approach" || view.mode === "interior"
+                ? 1
+                : 0.001
+            }
+          >
+            <BaseScene station={active} interior={showInterior} />
           </group>
         )}
 
@@ -112,14 +165,6 @@ export default function MapScene() {
           onArrived={() => setView((v) => (v.mode === "dive" ? { mode: "base", id: v.id } : v))}
           onReturned={() => setView({ mode: "map" })}
         />
-        {/* Mounted only on the map — remounting resets control state after
-            CameraDirector has been flying the camera. Azimuth/polar are
-            capped to keep the camera inside the real-photo hemisphere —
-            past this the texture thins into the procedural far side. Moon.tsx
-            also bakes a terminator vignette (fading to black) centered on the
-            same point, so any sliver right at the limit reads as shadow
-            rather than a flat, undetailed patch. No autoRotate: it would
-            just drift into the limit and stall, which reads as broken. */}
         {onMap && (
           <OrbitControls
             enablePan={false}
@@ -136,11 +181,6 @@ export default function MapScene() {
         )}
       </Canvas>
 
-      {/* Transition fade layer. Starts already opaque on a deep link — the
-          first paint here happens before CameraDirector's first useFrame
-          tick, so if this started at 0 there'd be a one-frame gap where
-          whatever's mid-generation (moon texture, hotspots, starfield) is
-          visible before the hold logic gets a chance to set it back to 1. */}
       <div
         ref={fadeRef}
         style={{
@@ -152,7 +192,6 @@ export default function MapScene() {
         }}
       />
 
-      {/* Overlay — top-left identity, doubling as the way back to the site */}
       <div style={{ position: "absolute", top: 28, left: 32 }}>
         <Link
           href="/"
@@ -176,15 +215,10 @@ export default function MapScene() {
             pointerEvents: "none",
           }}
         >
-          {onMap
-            ? "9 nodes · Near side · Octogram"
-            : view.mode === "base"
-              ? "Station orbit · Esc to return"
-              : "On approach"}
+          {statusLine}
         </div>
       </div>
 
-      {/* Overlay — station name + purpose (hover on map, flyover at base) */}
       <div
         style={{
           position: "absolute",
@@ -212,35 +246,62 @@ export default function MapScene() {
             fontSize: 13.5,
             color: "var(--ink-dim)",
             marginTop: 6,
-            maxWidth: 340,
+            maxWidth: 360,
           }}
         >
-          {labelStation?.purpose}
+          {view.mode === "interior"
+            ? "Residential bay · hydroponic CO₂ recycle · wall-crown gardens"
+            : labelStation?.purpose}
         </div>
       </div>
 
-      {/* Overlay — return control while orbiting a base */}
-      <button
-        onClick={returnToMap}
+      {/* Right-side controls */}
+      <div
         style={{
           position: "absolute",
           right: 32,
           bottom: 30,
-          ...mono,
-          fontSize: 10.5,
-          letterSpacing: "0.26em",
-          color: "var(--ink)",
-          background: "rgba(238, 242, 247, 0.06)",
-          border: "1px solid rgba(238, 242, 247, 0.18)",
-          padding: "10px 16px",
-          cursor: "pointer",
-          opacity: view.mode === "base" ? 1 : 0,
-          pointerEvents: view.mode === "base" ? "auto" : "none",
-          transition: "opacity 300ms ease",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "flex-end",
+          gap: 8,
         }}
       >
-        ← Return to array
-      </button>
+        {enterable && (view.mode === "base" || view.mode === "approach") && (
+          <button
+            onClick={enterResidence}
+            style={{
+              ...btnBase,
+              borderColor: "rgba(196, 138, 255, 0.45)",
+              background: "rgba(196, 138, 255, 0.12)",
+            }}
+          >
+            Enter residence
+          </button>
+        )}
+        {(view.mode === "base" || view.mode === "approach") && (
+          <button
+            onClick={approachBase}
+            style={{
+              ...btnBase,
+              opacity: 1,
+              pointerEvents: "auto",
+            }}
+          >
+            {view.mode === "approach" ? "← Wider orbit" : "Approach base"}
+          </button>
+        )}
+        {view.mode === "interior" && (
+          <button onClick={exitResidence} style={{ ...btnBase, opacity: 1, pointerEvents: "auto" }}>
+            ← Exit residence
+          </button>
+        )}
+        {(view.mode === "base" || view.mode === "approach") && (
+          <button onClick={returnToMap} style={{ ...btnBase, opacity: 1, pointerEvents: "auto" }}>
+            ← Return to array
+          </button>
+        )}
+      </div>
     </>
   );
 }
