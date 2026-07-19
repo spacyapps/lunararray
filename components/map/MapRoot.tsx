@@ -23,70 +23,33 @@
 // SSR-mismatch correction can resolve to the real value after that state
 // already latched onto the stale server snapshot.)
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useAccessUnlocked } from "@/lib/access";
 import RequestAccess from "../RequestAccess";
 
-const loadingShell = (
-  <div
-    style={{
-      position: "absolute",
-      inset: 0,
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      fontFamily: "var(--mono)",
-      fontSize: 11,
-      letterSpacing: "0.24em",
-      textTransform: "uppercase",
-      color: "var(--ink-ghost)",
-    }}
-  >
-    Acquiring array…
-  </div>
-);
-
-/** Three.js map — kept as fallback until Godot HTML5 export is present. */
 const MapScene = dynamic(() => import("./MapScene"), {
   ssr: false,
-  loading: () => loadingShell,
+  loading: () => (
+    <div
+      style={{
+        position: "absolute",
+        inset: 0,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontFamily: "var(--mono)",
+        fontSize: 11,
+        letterSpacing: "0.24em",
+        textTransform: "uppercase",
+        color: "var(--ink-ghost)",
+      }}
+    >
+      Acquiring array…
+    </div>
+  ),
 });
-
-/** Godot 4 HTML5 embed (public/godot/index.html). */
-const GodotMapEmbed = dynamic(() => import("./GodotMapEmbed"), {
-  ssr: false,
-  loading: () => loadingShell,
-});
-
-/** Prefer Godot when exported; set NEXT_PUBLIC_MAP_ENGINE=three to force R3F. */
-function useMapEngine(): "godot" | "three" | "pending" {
-  const forced =
-    typeof process !== "undefined" ? process.env.NEXT_PUBLIC_MAP_ENGINE : undefined;
-  // Forced engine is resolved at init — no effect setState.
-  const [engine, setEngine] = useState<"godot" | "three" | "pending">(() => {
-    if (forced === "three" || forced === "godot") return forced;
-    return "pending";
-  });
-
-  useEffect(() => {
-    if (forced === "three" || forced === "godot") return;
-    let cancelled = false;
-    fetch("/godot/index.html", { method: "HEAD" })
-      .then((r) => {
-        if (!cancelled) setEngine(r.ok ? "godot" : "three");
-      })
-      .catch(() => {
-        if (!cancelled) setEngine("three");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [forced]);
-
-  return engine;
-}
 
 const mono: React.CSSProperties = {
   fontFamily: "var(--mono)",
@@ -150,7 +113,6 @@ export default function MapRoot() {
   const unlocked = useAccessUnlocked();
   const [booted, setBooted] = useState(false);
   const [dismissed, setDismissed] = useState(false);
-  const engine = useMapEngine();
   // If a live boot sequence was never opened on this screen, `unlocked`
   // alone decides (a returning visitor sees the map immediately). If one
   // was opened, the swap waits until it's dismissed, so the "temporary
@@ -167,13 +129,7 @@ export default function MapRoot() {
       }}
     >
       {showMap ? (
-        engine === "pending" ? (
-          loadingShell
-        ) : engine === "godot" ? (
-          <GodotMapEmbed />
-        ) : (
-          <MapScene />
-        )
+        <MapScene />
       ) : (
         <LockedMap onRequestOpen={() => setBooted(true)} onRequestDone={() => setDismissed(true)} />
       )}

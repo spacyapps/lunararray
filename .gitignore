@@ -39,8 +39,3 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-
-# Godot editor (regenerated on open/export)
-godot/**/.godot/
-godot/**/*.import
-godot/**/*.uid
