@@ -269,22 +269,21 @@ export function Teardrop({
    *  clusters, and periodic patio bands — for city/residential towers. */
   variant?: "hull" | "residential";
 } & ThreeElements["group"]) {
+  // Profile 28 / radial 40 — reads smooth at orbit distances without 96-seg cost.
   const geometry = useMemo(() => {
     const pts: THREE.Vector2[] = [];
-    const N = 48;
+    const N = 28;
     for (let i = 0; i <= N; i++) {
       const u = i / N;
-      // belly low, long taper to the tip
       const r = radius * Math.sin(Math.PI * Math.pow(u, 0.62)) * (1 - u * 0.12);
       pts.push(new THREE.Vector2(Math.max(0.0001, r), u * height));
     }
     pts.push(new THREE.Vector2(0.0001, height));
-    return new THREE.LatheGeometry(pts, 96);
+    return new THREE.LatheGeometry(pts, 40);
   }, [height, radius]);
 
   const hullSeed = seed ?? Math.round(height * 37 + radius * 131);
   const isResidential = variant === "residential";
-  // Default hero hull when no explicit imageMap — photoreal panel map.
   const resolvedImageMap = imageMap ?? (isResidential ? undefined : "/textures/hull-panel.jpg");
   const residentialCanvases = useMemo(() => {
     if (!isResidential) return null;
@@ -294,14 +293,14 @@ export function Teardrop({
     const canvas = residentialCanvases ? residentialCanvases.map : buildHullTexture(height, hullSeed);
     const tex = new THREE.CanvasTexture(canvas);
     tex.colorSpace = THREE.SRGBColorSpace;
-    tex.anisotropy = 8;
+    tex.anisotropy = 4;
     return tex;
   }, [height, hullSeed, residentialCanvases]);
   const proceduralEmissiveMap = useMemo(() => {
     if (!residentialCanvases) return null;
     const tex = new THREE.CanvasTexture(residentialCanvases.emissive);
     tex.colorSpace = THREE.SRGBColorSpace;
-    tex.anisotropy = 8;
+    tex.anisotropy = 4;
     return tex;
   }, [residentialCanvases]);
 
@@ -312,7 +311,7 @@ export function Teardrop({
     new THREE.TextureLoader().load(resolvedImageMap, (tex) => {
       if (cancelled) return;
       tex.colorSpace = THREE.SRGBColorSpace;
-      tex.anisotropy = 8;
+      tex.anisotropy = 4;
       setImageTexture(tex);
     });
     return () => {
@@ -325,18 +324,18 @@ export function Teardrop({
 
   return (
     <group {...props}>
-      <mesh geometry={geometry} castShadow receiveShadow>
+      {/* Cast only — ground receives; avoid double shadow cost */}
+      <mesh geometry={geometry} castShadow>
         <meshStandardMaterial
           color={color}
           map={texture}
           bumpMap={texture}
-          bumpScale={glowing ? 0.04 : 0.06}
+          bumpScale={glowing ? 0.035 : 0.05}
           roughness={glowing ? 0.42 : 0.38}
           metalness={glowing ? 0.22 : 0.45}
-          envMapIntensity={1.1}
           emissiveMap={glowing ? proceduralEmissiveMap : undefined}
           emissive={glowing ? "#ffffff" : emissive ?? "#000000"}
-          emissiveIntensity={glowing ? 1.15 : emissive ? emissiveIntensity : 0}
+          emissiveIntensity={glowing ? 1.05 : emissive ? emissiveIntensity : 0}
         />
       </mesh>
     </group>
@@ -420,33 +419,28 @@ export function LensDome({
 
   return (
     <group {...props}>
-      <mesh scale={[1, squash, 1]} castShadow receiveShadow>
-        <sphereGeometry args={[r, 96, 48, 0, Math.PI * 2, 0, Math.PI / 2]} />
-        <meshPhysicalMaterial
+      {/* Standard glass look without transmission (GPU-heavy on mobile) */}
+      <mesh scale={[1, squash, 1]} castShadow>
+        <sphereGeometry args={[r, 48, 24, 0, Math.PI * 2, 0, Math.PI / 2]} />
+        <meshStandardMaterial
           color={color}
           map={imageTexture ?? undefined}
           transparent
           opacity={opacity}
-          roughness={0.08}
-          metalness={0.05}
-          transmission={0.45}
-          thickness={1.2}
-          ior={1.45}
-          clearcoat={0.6}
-          clearcoatRoughness={0.15}
+          roughness={0.12}
+          metalness={0.08}
           bumpMap={bump}
-          bumpScale={0.04}
+          bumpScale={0.035}
           emissive={emissive ?? "#000000"}
-          emissiveIntensity={emissive ? 0.55 : 0}
-          envMapIntensity={1.4}
+          emissiveIntensity={emissive ? 0.5 : 0}
           side={THREE.DoubleSide}
+          depthWrite={false}
         />
       </mesh>
-      {/* soft inner glow volume */}
       {emissive && (
         <mesh scale={[0.92, squash * 0.9, 0.92]}>
-          <sphereGeometry args={[r, 48, 24, 0, Math.PI * 2, 0, Math.PI / 2]} />
-          <meshBasicMaterial color={emissive} transparent opacity={0.08} side={THREE.BackSide} depthWrite={false} />
+          <sphereGeometry args={[r, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2]} />
+          <meshBasicMaterial color={emissive} transparent opacity={0.07} side={THREE.BackSide} depthWrite={false} />
         </mesh>
       )}
     </group>
@@ -574,32 +568,30 @@ export function SweepTube({
     () => new THREE.CatmullRomCurve3(pts.map((p) => new THREE.Vector3(...p))),
     [pts],
   );
-  const geometry = useMemo(() => new THREE.TubeGeometry(curve, 96, r, 20, false), [curve, r]);
+  const geometry = useMemo(() => new THREE.TubeGeometry(curve, 40, r, 10, false), [curve, r]);
   const texture = useMemo(() => {
     const tex = new THREE.CanvasTexture(buildTubeTexture());
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.wrapS = THREE.RepeatWrapping;
     tex.wrapT = THREE.RepeatWrapping;
-    const ringSpacing = 3; // world units per ring seam
+    const ringSpacing = 3;
     tex.repeat.set(1, Math.max(1, Math.round(curve.getLength() / ringSpacing)));
-    tex.anisotropy = 8;
+    tex.anisotropy = 2;
     return tex;
   }, [curve]);
-  // `toon` kept for API compatibility — always PBR now.
   void toon;
   return (
     <group {...props}>
-      <mesh geometry={geometry} castShadow receiveShadow>
+      <mesh geometry={geometry}>
         <meshStandardMaterial
           color={color}
           map={texture}
           bumpMap={texture}
-          bumpScale={0.035}
+          bumpScale={0.03}
           emissive={emissive ?? "#000000"}
-          emissiveIntensity={emissive ? 0.75 : 0}
+          emissiveIntensity={emissive ? 0.7 : 0}
           roughness={0.42}
           metalness={0.55}
-          envMapIntensity={1.0}
         />
       </mesh>
     </group>
@@ -824,13 +816,13 @@ export function Beacon({
       mat.current.opacity = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(clock.getElapsedTime() * speed));
     }
   });
+  // No per-beacon PointLight — dozens of dynamic lights destroy fillrate.
   return (
     <group {...props}>
       <mesh>
-        <sphereGeometry args={[size, 20, 20]} />
+        <sphereGeometry args={[size, 10, 10]} />
         <meshBasicMaterial ref={mat} color={color} transparent />
       </mesh>
-      <pointLight color={color} intensity={2.5 * size} distance={size * 18} />
     </group>
   );
 }
@@ -922,63 +914,47 @@ export function SunlightPod({
     new THREE.TextureLoader().load(imageMap, (t) => {
       if (cancelled) return;
       t.colorSpace = THREE.SRGBColorSpace;
-      t.anisotropy = 8;
+      t.anisotropy = 4;
       setTex(t);
     });
     return () => {
       cancelled = true;
     };
   }, [imageMap]);
-  const glow = useRef<THREE.MeshStandardMaterial>(null);
-  useFrame(({ clock }) => {
-    if (glow.current) {
-      glow.current.emissiveIntensity = 0.55 + 0.35 * (0.5 + 0.5 * Math.sin(clock.getElapsedTime() * 1.1));
-    }
-  });
+  // No per-pod point light — the ring has one shared glow.
   return (
     <group {...props} scale={scale}>
-      <mesh position={[0, 1.1, 0]} castShadow>
-        <cylinderGeometry args={[0.06, 0.12, 2.2, 16]} />
-        <meshStandardMaterial color="#c8ccd8" metalness={0.7} roughness={0.28} />
+      <mesh position={[0, 1.1, 0]}>
+        <cylinderGeometry args={[0.06, 0.12, 2.2, 8]} />
+        <meshStandardMaterial color="#c8ccd8" metalness={0.65} roughness={0.3} />
       </mesh>
-      <mesh position={[0, 2.25, 0]} rotation={[Math.PI / 2, 0, 0]} castShadow>
-        <torusGeometry args={[0.28, 0.05, 12, 32]} />
-        <meshStandardMaterial color="#9aa0b4" metalness={0.75} roughness={0.28} />
+      <mesh position={[0, 2.25, 0]} rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[0.28, 0.05, 8, 16]} />
+        <meshStandardMaterial color="#9aa0b4" metalness={0.7} roughness={0.3} />
       </mesh>
       <group position={[0, 2.85, 0]} rotation={[0.35, 0, 0.15]}>
-        <mesh scale={[1, 1.35, 0.72]} castShadow>
-          <sphereGeometry args={[0.55, 48, 36]} />
-          <meshPhysicalMaterial
+        <mesh scale={[1, 1.35, 0.72]}>
+          <sphereGeometry args={[0.55, 20, 14]} />
+          <meshStandardMaterial
             color="#f2e8ff"
             map={tex ?? undefined}
             transparent
-            opacity={0.88}
-            roughness={0.12}
-            metalness={0.15}
-            transmission={0.35}
-            thickness={0.8}
-            clearcoat={0.5}
+            opacity={0.85}
+            roughness={0.18}
+            metalness={0.2}
             emissive={warm}
-            emissiveIntensity={0.35}
+            emissiveIntensity={0.4}
           />
         </mesh>
         <mesh position={[0, 0.08, 0]} scale={[0.72, 0.9, 0.45]}>
-          <sphereGeometry args={[0.42, 28, 20]} />
-          <meshStandardMaterial
-            ref={glow}
-            color={accent}
-            emissive={accent}
-            emissiveIntensity={0.7}
-            roughness={0.3}
-            metalness={0.4}
-          />
+          <sphereGeometry args={[0.42, 12, 10]} />
+          <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={0.75} roughness={0.35} metalness={0.35} />
         </mesh>
         <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, -0.05, 0]}>
-          <torusGeometry args={[0.52, 0.035, 12, 40]} />
-          <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={1.1} roughness={0.25} metalness={0.5} />
+          <torusGeometry args={[0.52, 0.035, 8, 20]} />
+          <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={1.0} roughness={0.3} metalness={0.45} />
         </mesh>
       </group>
-      <pointLight position={[0, 3.1, 0]} intensity={6 * scale} color={warm} distance={8 * scale} />
     </group>
   );
 }
@@ -999,8 +975,10 @@ export function SunlightPodRing({
   scale?: number;
   phase?: number;
 }) {
+  // Shared warm fill for the whole ring instead of N point lights.
   return (
     <group>
+      <pointLight position={[0, 4, 0]} intensity={18} color="#ffd9a0" distance={radius * 1.4} decay={2} />
       {Array.from({ length: count }).map((_, i) => {
         const a = (i / count) * Math.PI * 2 + phase;
         const s = scale * (0.85 + seedRand(i * 17 + 4) * 0.35);

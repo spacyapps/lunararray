@@ -72,21 +72,26 @@ function Trams({ radius, y, period, count }: { radius: number; y: number; period
 }
 
 function AtmosphereBeams() {
+  // Three shafts only — full ring was pure fillrate cost at night.
+  const picks = [0, 3, 6];
   return (
     <group>
-      {TOWERS.filter((_, i) => i % 2 === 0).map((t, i) => (
-        <mesh key={i} position={[t.x, t.h * 0.45, t.z]}>
-          <cylinderGeometry args={[0.35, 1.1, t.h * 0.9, 16, 1, true]} />
-          <meshBasicMaterial
-            color={i % 2 ? ACCENT : WARM}
-            transparent
-            opacity={0.05}
-            side={THREE.DoubleSide}
-            depthWrite={false}
-            blending={THREE.AdditiveBlending}
-          />
-        </mesh>
-      ))}
+      {picks.map((idx, i) => {
+        const t = TOWERS[idx];
+        return (
+          <mesh key={i} position={[t.x, t.h * 0.45, t.z]}>
+            <cylinderGeometry args={[0.35, 1.0, t.h * 0.85, 10, 1, true]} />
+            <meshBasicMaterial
+              color={i % 2 ? ACCENT : WARM}
+              transparent
+              opacity={0.045}
+              side={THREE.DoubleSide}
+              depthWrite={false}
+              blending={THREE.AdditiveBlending}
+            />
+          </mesh>
+        );
+      })}
     </group>
   );
 }
@@ -97,16 +102,17 @@ export default function LA08() {
       <BaseLighting
         keyPos={[-28, 36, 32]}
         keyColor="#c8d4f0"
-        keyIntensity={2.2}
+        keyIntensity={2.4}
         fillPos={[32, 14, -28]}
         fillColor={ACCENT}
-        fillIntensity={1.4}
-        ambient={0.1}
+        fillIntensity={1.25}
+        ambient={0.12}
         godRays
+        contact
       />
-      <pointLight position={[0, 6, 0]} intensity={100} color={PARK} distance={28} castShadow={false} />
-      <pointLight position={[0, 12, 0]} intensity={55} color={WARM} distance={44} />
-      <pointLight position={[14, 7, -8]} intensity={30} color={ACCENT} distance={30} />
+      {/* Two practicals max — was three high-intensity point lights */}
+      <pointLight position={[0, 7, 0]} intensity={70} color={PARK} distance={26} decay={2} />
+      <pointLight position={[12, 8, -6]} intensity={28} color={WARM} distance={32} decay={2} />
 
       <BaseEnvironment groundColor="#8a8694" rockTint="#6e6a78" seed={8} />
 
@@ -158,8 +164,9 @@ export default function LA08() {
 
       <AtmosphereBeams />
 
-      <SunlightPodRing radius={30} count={14} accent={ACCENT} scale={1.12} phase={0.12} />
-      <SunlightPodRing radius={22.5} count={8} accent={WARM} scale={0.78} phase={0.4} />
+      {/* Outer rim collectors (design req) + leaner inner ring */}
+      <SunlightPodRing radius={30} count={12} accent={ACCENT} scale={1.1} phase={0.12} />
+      <SunlightPodRing radius={22.5} count={6} accent={WARM} scale={0.75} phase={0.4} />
 
       {(
         [

@@ -126,9 +126,8 @@ export default function ResidentialInterior() {
         castShadow
         shadow-mapSize={[1024, 1024]}
       />
-      <pointLight position={[0, 2.7, 0]} intensity={22} color={WARM} distance={14} decay={2} />
-      <pointLight position={[-2.5, 2.3, -1]} intensity={12} color={ACCENT} distance={9} decay={2} />
-      <pointLight position={[2.8, 2.1, 2]} intensity={10} color={GROW} distance={8} decay={2} />
+      <pointLight position={[0, 2.7, 0]} intensity={20} color={WARM} distance={14} decay={2} />
+      <pointLight position={[2.4, 2.2, 1.5]} intensity={10} color={GROW} distance={9} decay={2} />
 
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]} receiveShadow>
         <planeGeometry args={[W, D]} />

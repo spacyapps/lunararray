@@ -17,6 +17,7 @@ import Starfield3D from "./Starfield3D";
 import CameraDirector from "./CameraDirector";
 import BaseScene from "./bases/BaseScene";
 import { RendererQuality } from "./bases/BaseLighting";
+import { AdaptivePerformance, useAdaptiveDpr } from "./bases/perf";
 import { View, EMBED_CAM_POS, EMBED_FOV, MAP_CAM_POS, MAP_FOV, canEnter } from "./view";
 import { STATIONS } from "@/lib/stations";
 import { APPROACHES, INTERIORS, ORBITS } from "./bases/orbits";
@@ -129,29 +130,34 @@ export default function MapScene() {
   const interiorSpec = activeId ? INTERIORS[activeId] ?? DEFAULT_INTERIOR : DEFAULT_INTERIOR;
   const exploreExterior = exploreReady && (view.mode === "base" || view.mode === "approach");
   const exploreInterior = exploreReady && view.mode === "interior";
+  // Shadows only when the local base is fully visible (not the tiny warm-up scale).
+  const baseLive =
+    view.mode === "base" || view.mode === "approach" || view.mode === "interior";
+  const dprRange = useAdaptiveDpr();
 
   return (
     <>
       <Canvas
-        shadows
+        shadows={baseLive}
         camera={{ position: isDeepLink ? EMBED_CAM_POS : MAP_CAM_POS, fov: isDeepLink ? EMBED_FOV : MAP_FOV }}
-        gl={{ antialias: true, powerPreference: "high-performance", logarithmicDepthBuffer: true }}
-        dpr={[1, 2]}
+        gl={{ antialias: true, powerPreference: "high-performance" }}
+        dpr={dprRange}
         style={{ position: "absolute", inset: 0 }}
         onCreated={({ gl }) => {
-          // Apply before first frame so SoftShadows-era PCFSoft default never
-          // sticks, and ACES tone mapping is live from paint one.
           gl.toneMapping = THREE.ACESFilmicToneMapping;
-          gl.toneMappingExposure = 1.15;
+          gl.toneMappingExposure = 1.12;
           gl.outputColorSpace = THREE.SRGBColorSpace;
           gl.shadowMap.enabled = true;
           gl.shadowMap.type = THREE.PCFShadowMap;
+          gl.shadowMap.autoUpdate = true;
         }}
       >
-        <RendererQuality shadows />
+        <RendererQuality shadows={baseLive} />
+        <AdaptivePerformance floor={dprRange[0]} ceiling={dprRange[1]} />
         <color attach="background" args={["#05060a"]} />
         <ambientLight intensity={showInterior ? 0 : 0.18} />
-        {!showInterior && <Starfield3D />}
+        {/* Starfield only on the moon map — not inside bases (saves draw). */}
+        {showMapWorld && <Starfield3D />}
 
         <group visible={showMapWorld}>
           <directionalLight position={[-6, 4, 5]} intensity={2.2} color="#fff4e0" />
@@ -171,13 +177,7 @@ export default function MapScene() {
         </group>
 
         {mountBase && active && (
-          <group
-            scale={
-              view.mode === "base" || view.mode === "approach" || view.mode === "interior"
-                ? 1
-                : 0.001
-            }
-          >
+          <group scale={baseLive ? 1 : 0.001}>
             <BaseScene station={active} interior={showInterior} />
           </group>
         )}
