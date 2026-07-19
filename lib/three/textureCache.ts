@@ -45,9 +45,24 @@ export function loadTexture(url: string, opts: TextureOpts = {}): Promise<THREE.
       url,
       (tex) => {
         applyOpts(tex, opts);
-        // Soft dimension cap without canvas resize (GPU will mipmap down).
-        // Real resize would need canvas; for now we rely on mipmaps + lower
-        // anisotropy on far materials.
+        // Optional max dimension cap via canvas resize (VRAM / bandwidth).
+        const max = opts.maxSize ?? 0;
+        const img = tex.image as HTMLImageElement | ImageBitmap | undefined;
+        if (max > 0 && img && "width" in img && Math.max(img.width, img.height) > max) {
+          const scale = max / Math.max(img.width, img.height);
+          const w = Math.max(1, Math.round(img.width * scale));
+          const h = Math.max(1, Math.round(img.height * scale));
+          const cv = document.createElement("canvas");
+          cv.width = w;
+          cv.height = h;
+          const ctx = cv.getContext("2d");
+          if (ctx) {
+            ctx.drawImage(img as CanvasImageSource, 0, 0, w, h);
+            // Canvas is a valid Texture image source; widen for TS
+            (tex as THREE.Texture & { image: HTMLCanvasElement }).image = cv;
+            tex.needsUpdate = true;
+          }
+        }
         cache.set(key, tex);
         inflight.delete(key);
         resolve(tex);

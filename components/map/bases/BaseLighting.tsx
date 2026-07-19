@@ -1,12 +1,13 @@
 "use client";
 
 // Shared lighting for local base scenes — warm key + cool fill, modest
-// shadows. God-ray cones removed (looked like visual noise).
+// shadows. Adaptive shadow map size for low-power devices.
 
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useThree } from "@react-three/fiber";
 import { ContactShadows } from "@react-three/drei";
 import * as THREE from "three";
+import { isLowPowerDevice } from "./perf";
 
 function applyRendererQuality(gl: THREE.WebGLRenderer, shadows: boolean) {
   gl.toneMapping = THREE.ACESFilmicToneMapping;
@@ -49,6 +50,10 @@ export default function BaseLighting({
   godRays?: boolean;
   contact?: boolean;
 }) {
+  const low = useMemo(() => isLowPowerDevice(), []);
+  const shadowSize = low ? 512 : 1024;
+  const contactRes = low ? 256 : 512;
+
   return (
     <group>
       <ambientLight intensity={ambient} color="#c8d4e8" />
@@ -59,7 +64,7 @@ export default function BaseLighting({
         intensity={keyIntensity}
         color={keyColor}
         castShadow
-        shadow-mapSize={[1024, 1024]}
+        shadow-mapSize={[shadowSize, shadowSize]}
         shadow-camera-near={2}
         shadow-camera-far={120}
         shadow-camera-left={-40}
@@ -74,11 +79,11 @@ export default function BaseLighting({
       {contact && (
         <ContactShadows
           position={[0, 0.02, 0]}
-          opacity={0.4}
+          opacity={0.38}
           scale={70}
           blur={2}
           far={22}
-          resolution={512}
+          resolution={contactRes}
           frames={1}
           color="#0a0c12"
         />

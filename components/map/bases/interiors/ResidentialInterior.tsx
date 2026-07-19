@@ -263,6 +263,132 @@ function PaperLantern({
   );
 }
 
+/** Habitat digital screen + slim control rail — zen-tech, not neon arcade. */
+function HabitatControlPanel({
+  wood,
+  position,
+  rotation,
+}: {
+  wood: THREE.Texture;
+  position: [number, number, number];
+  rotation?: [number, number, number];
+}) {
+  return (
+    <group position={position} rotation={rotation}>
+      {/* wood surround */}
+      <mesh position={[0, 0, -0.02]} castShadow>
+        <boxGeometry args={[1.35, 1.05, 0.06]} />
+        <meshStandardMaterial map={wood} color="#6a5a48" roughness={0.5} metalness={0.08} />
+      </mesh>
+      {/* main display */}
+      <mesh position={[0, 0.08, 0.02]}>
+        <planeGeometry args={[1.15, 0.72]} />
+        <meshStandardMaterial
+          color="#0a1018"
+          emissive="#2a6a8a"
+          emissiveIntensity={0.45}
+          roughness={0.25}
+          metalness={0.2}
+        />
+      </mesh>
+      {/* soft UI bands */}
+      {(
+        [
+          [0, 0.28, 0.9, 0.03],
+          [0, 0.12, 0.75, 0.02],
+          [0, -0.02, 0.55, 0.02],
+          [-0.28, -0.18, 0.35, 0.08],
+          [0.22, -0.18, 0.28, 0.08],
+        ] as const
+      ).map(([x, y, w, h], i) => (
+        <mesh key={i} position={[x, y, 0.025]}>
+          <planeGeometry args={[w, h]} />
+          <meshBasicMaterial
+            color={i < 3 ? ACCENT : GROW}
+            transparent
+            opacity={i < 3 ? 0.55 : 0.4}
+          />
+        </mesh>
+      ))}
+      {/* status glyph */}
+      <mesh position={[0.42, 0.28, 0.03]}>
+        <circleGeometry args={[0.04, 12]} />
+        <meshBasicMaterial color={GROW} />
+      </mesh>
+      {/* control strip under screen */}
+      <mesh position={[0, -0.42, 0.03]} castShadow>
+        <boxGeometry args={[1.1, 0.12, 0.04]} />
+        <meshStandardMaterial color="#1a1c22" metalness={0.45} roughness={0.35} />
+      </mesh>
+      {[-0.35, -0.12, 0.12, 0.35].map((x, i) => (
+        <mesh key={`btn-${i}`} position={[x, -0.42, 0.06]}>
+          <cylinderGeometry args={[0.028, 0.028, 0.02, 12]} />
+          <meshStandardMaterial
+            color={i === 0 ? GROW : "#3a4050"}
+            emissive={i === 0 ? GROW : "#000000"}
+            emissiveIntensity={i === 0 ? 0.6 : 0}
+            metalness={0.4}
+            roughness={0.3}
+          />
+        </mesh>
+      ))}
+      <pointLight position={[0, 0.1, 0.35]} intensity={2.4} color="#5cb8d8" distance={2.8} decay={2} />
+    </group>
+  );
+}
+
+/** Quiet zen corner: low pedestal, ceramic, stone, small plant. */
+function ZenCorner({
+  wood,
+  position,
+  rotation,
+}: {
+  wood: THREE.Texture;
+  position: [number, number, number];
+  rotation?: [number, number, number];
+}) {
+  return (
+    <group position={position} rotation={rotation}>
+      {/* low wood pedestal */}
+      <mesh position={[0, 0.12, 0]} castShadow receiveShadow>
+        <cylinderGeometry args={[0.32, 0.36, 0.22, 24]} />
+        <meshStandardMaterial map={wood} color="#8a7a62" roughness={0.55} />
+      </mesh>
+      {/* ceramic vessel */}
+      <mesh position={[-0.06, 0.38, 0.04]} castShadow>
+        <cylinderGeometry args={[0.07, 0.1, 0.32, 14]} />
+        <meshStandardMaterial color="#e0d8cc" roughness={0.42} metalness={0.04} />
+      </mesh>
+      <mesh position={[-0.06, 0.56, 0.04]}>
+        <cylinderGeometry args={[0.045, 0.055, 0.06, 12]} />
+        <meshStandardMaterial color="#d4ccc0" roughness={0.45} />
+      </mesh>
+      {/* ikebana stem + leaf */}
+      <mesh position={[-0.04, 0.78, 0.05]} rotation={[0.2, 0, 0.15]}>
+        <cylinderGeometry args={[0.008, 0.012, 0.38, 6]} />
+        <meshStandardMaterial color="#3a5a38" roughness={0.8} />
+      </mesh>
+      <mesh position={[0.02, 0.92, 0.08]} castShadow>
+        <sphereGeometry args={[0.07, 10, 8]} />
+        <meshStandardMaterial color="#4a7a48" roughness={0.75} />
+      </mesh>
+      {/* river stones */}
+      {(
+        [
+          [0.14, 0.28, -0.06, 0.06],
+          [0.2, 0.26, 0.06, 0.045],
+          [0.1, 0.25, 0.1, 0.035],
+        ] as const
+      ).map(([x, y, z, s], i) => (
+        <mesh key={i} position={[x, y, z]} scale={[1, 0.55, 0.85]} castShadow>
+          <sphereGeometry args={[s, 10, 8]} />
+          <meshStandardMaterial color={i % 2 ? "#7a766e" : "#9a968c"} roughness={0.9} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
 /** Low shoji-style wood rail / picture rail detail on a wall. */
 function WoodRail({
   wood,
@@ -542,13 +668,13 @@ function InteriorScene() {
 
   const W = 8.6;
   const D = 7.4;
-  const H = 3.25;
+  const H = 4.05; // taller bay — more air under the plant crown
 
   // Window geometry — keep greenery clear of this
   const winW = 4.0;
-  const winH = 2.1;
-  const winCenterY = 1.5;
-  const winTopY = winCenterY + winH / 2; // ~2.55
+  const winH = 2.25;
+  const winCenterY = 1.65;
+  const winTopY = winCenterY + winH / 2;
 
   return (
     <group>
@@ -620,41 +746,19 @@ function InteriorScene() {
           <boxGeometry args={[winW + 0.35, winH + 0.35, 0.04]} />
           <meshStandardMaterial color="#ffffff" roughness={0.55} />
         </mesh>
-        {/* lunar view — rough regolith surface (not flat/plastic) */}
-        <mesh position={[0, 0, 0.02]} renderOrder={3} receiveShadow>
+        {/* Flat photo view — no bump/PBR glare (reads as distant landscape, not a 3D panel) */}
+        <mesh position={[0, 0, 0.02]} renderOrder={3}>
           <planeGeometry args={[winW, winH]} />
-          <meshStandardMaterial
-            map={windowView}
-            color="#d8d4cc"
-            bumpMap={windowView}
-            bumpScale={0.12}
-            roughness={0.96}
-            metalness={0}
-            envMapIntensity={0.15}
-          />
+          <meshBasicMaterial map={windowView} toneMapped={false} depthWrite />
         </mesh>
-        {/* very light glass veil — matte, not glossy */}
-        <mesh position={[0, 0, 0.035]} renderOrder={4}>
-          <planeGeometry args={[winW, winH]} />
-          <meshStandardMaterial
-            color="#e8e4dc"
-            transparent
-            opacity={0.04}
-            roughness={0.85}
-            metalness={0}
-            depthWrite={false}
-          />
-        </mesh>
-        {/* cool exterior fill */}
-        <pointLight position={[0, 0, 0.4]} intensity={4.5} color="#b8c8d8" distance={5} decay={2} />
       </group>
 
-      {/* Living-wall crown — gap keeps the window clear */}
+      {/* Living-wall crown — gap keeps the window clear; all strips sway */}
       <CeilingPlantShelf
         width={W}
         depth={D}
         y={H - 0.06}
-        plantHeight={1.35}
+        plantHeight={1.55}
         inset={0.1}
         accent={GROW}
         grow={ACCENT}
@@ -671,33 +775,53 @@ function InteriorScene() {
         rotation={[0, -Math.PI / 2, 0]}
       />
 
-      {/* Sumi-e scroll on −X wall — fully under the plant crown */}
+      {/* Door wall (+Z): lanterns flanking tapestry, control in empty gap, shelf */}
+      <PaperLantern position={[-2.4, 1.75, D / 2 - 0.18]} scale={0.9} />
       <HangingScroll
         map={scrollSumi}
-        position={[-W / 2 + 0.06, 1.05, 0.55]}
-        rotation={[0, Math.PI / 2, 0]}
-        w={0.52}
-        h={0.95}
-      />
-
-      {/* Kanji scroll on door wall — clear of greenery */}
-      <HangingScroll
-        map={scrollKanji}
-        position={[-1.6, 1.0, D / 2 - 0.06]}
+        position={[-1.55, 1.15, D / 2 - 0.06]}
         rotation={[0, Math.PI, 0]}
-        w={0.4}
-        h={0.85}
+        w={0.5}
+        h={1.0}
       />
-
-      {/* Wood shelves with books */}
+      <PaperLantern position={[-0.7, 1.75, D / 2 - 0.18]} scale={0.9} />
+      <WoodRail wood={wood} length={2.5} position={[-1.55, 1.95, D / 2 - 0.05]} rotation={[0, Math.PI, 0]} />
+      {/* digital habitat control between right lantern and bookshelf */}
+      <HabitatControlPanel
+        wood={wood}
+        position={[0.55, 1.4, D / 2 - 0.08]}
+        rotation={[0, Math.PI, 0]}
+      />
       <BookShelf
         wood={wood}
-        width={1.55}
+        width={1.35}
+        shelves={1}
+        seed={11}
+        position={[2.15, 0.55, D / 2 - 0.14]}
+        rotation={[0, Math.PI, 0]}
+      />
+
+      {/* Left wall (−X): 星 tapestry with lanterns on both sides */}
+      <PaperLantern position={[-W / 2 + 0.22, 1.72, 1.35]} scale={0.88} />
+      <HangingScroll
+        map={scrollKanji}
+        position={[-W / 2 + 0.06, 1.12, 0.55]}
+        rotation={[0, Math.PI / 2, 0]}
+        w={0.48}
+        h={1.05}
+      />
+      <PaperLantern position={[-W / 2 + 0.22, 1.72, -0.25]} scale={0.88} />
+      <WoodRail wood={wood} length={2.2} position={[-W / 2 + 0.05, 1.95, 0.55]} rotation={[0, Math.PI / 2, 0]} />
+      <BookShelf
+        wood={wood}
+        width={1.45}
         shelves={2}
         seed={3}
-        position={[-W / 2 + 0.14, 0.35, -1.35]}
+        position={[-W / 2 + 0.14, 0.35, -1.45]}
         rotation={[0, Math.PI / 2, 0]}
       />
+
+      {/* Right wall / tokonoma side */}
       <BookShelf
         wood={wood}
         width={1.25}
@@ -706,22 +830,10 @@ function InteriorScene() {
         position={[W / 2 - 0.14, 0.4, -1.6]}
         rotation={[0, -Math.PI / 2, 0]}
       />
-      <BookShelf
-        wood={wood}
-        width={1.4}
-        shelves={1}
-        seed={11}
-        position={[1.9, 0.55, D / 2 - 0.14]}
-        rotation={[0, Math.PI, 0]}
-      />
+      <PaperLantern position={[2.25, 1.7, -0.45]} scale={0.8} />
 
-      {/* Slim wood rails under plant line (not buried in foliage) */}
-      <WoodRail wood={wood} length={2.2} position={[-W / 2 + 0.05, 1.72, 0.5]} rotation={[0, Math.PI / 2, 0]} />
-      <WoodRail wood={wood} length={1.5} position={[1.5, 1.72, D / 2 - 0.05]} rotation={[0, Math.PI, 0]} />
-
-      {/* Paper lanterns hung below greenery */}
-      <PaperLantern position={[-2.2, 1.65, 1.4]} scale={0.9} />
-      <PaperLantern position={[2.3, 1.55, -0.6]} scale={0.8} />
+      {/* Zen corner (−X / window side) */}
+      <ZenCorner wood={wood} position={[-W / 2 + 0.55, 0, -D / 2 + 0.7]} />
 
       {/* Low wood console under window — tansu-inspired oval */}
       <mesh position={[0, 0.22, -D / 2 + 0.48]} scale={[1.5, 1, 0.5]} castShadow receiveShadow>

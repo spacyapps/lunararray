@@ -5,7 +5,7 @@
 // organic curved silhouettes (teardrops, lenses, swept tubes) with
 // saturated accents; military scenes stay angular and colder.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useFrame, type ThreeElements } from "@react-three/fiber";
 import * as THREE from "three";
 
@@ -409,14 +409,11 @@ export function Teardrop({
 /**
  * Tapered residential tower:
  *  - INNER: horizontal glowing floor slices (lit levels)
- *  - OUTER: vertical glass pillars around the perimeter
- * Matches fluted frosted-glass towers with warm interiors.
+ *  - OUTER: vertical glass pillars (InstancedMesh — one draw call)
  */
 export function GlassTaperTower({
   height = 12,
-  /** Base radius (bottom). */
   radius = 2.5,
-  /** Top radius as a fraction of base — mild taper. */
   topScale = 0.78,
   color = "#e8f2fa",
   seed = 1,
@@ -426,7 +423,6 @@ export function GlassTaperTower({
   radius?: number;
   topScale?: number;
   color?: string;
-  /** @deprecated unused — pillars are geometric now */
   imageMap?: string;
   seed?: number;
 } & ThreeElements["group"]) {
@@ -437,36 +433,50 @@ export function GlassTaperTower({
   const midR = (rBot + rTop) * 0.5;
 
   const floors = useMemo(() => {
-    const n = Math.max(6, Math.round(height / 1.25));
+    const n = Math.max(6, Math.round(height / 1.3));
     const list: { y: number; r: number; bright: number }[] = [];
     for (let i = 0; i < n; i++) {
       const u = (i + 0.55) / (n + 0.2);
       const y = Math.min(height * 0.96, u * height);
       const r = rBot + (rTop - rBot) * (y / height);
       const bright = 0.5 + seedRand(seed * 11 + i * 7) * 0.5;
-      // Occasional dim floor (some lights off)
       const on = seedRand(seed * 3 + i * 13) > 0.12;
       list.push({ y, r, bright: on ? bright : 0.12 });
     }
     return list;
   }, [height, rBot, rTop, seed]);
 
-  const pillars = useMemo(() => {
-    const n = Math.max(22, Math.round(radius * 12));
-    const items: { a: number; x: number; z: number }[] = [];
-    for (let i = 0; i < n; i++) {
-      const a = (i / n) * Math.PI * 2 + 0.02;
-      items.push({ a, x: Math.cos(a), z: Math.sin(a) });
-    }
-    return items;
-  }, [radius]);
-
-  const pillarW = Math.max(0.11, (Math.PI * midR * 2) / pillars.length * 0.78);
+  const pillarCount = Math.max(20, Math.round(radius * 11));
+  const pillarW = Math.max(0.11, (Math.PI * midR * 2) / pillarCount * 0.78);
   const pillarD = Math.max(0.09, radius * 0.06);
+
+  const pillarMesh = useRef<THREE.InstancedMesh>(null);
+  const pillarGeo = useMemo(() => new THREE.BoxGeometry(pillarW, pillarLen, pillarD), [pillarW, pillarLen, pillarD]);
+
+  useLayoutEffect(() => {
+    if (!pillarMesh.current) return;
+    const dummy = new THREE.Object3D();
+    const eul = new THREE.Euler();
+    const q = new THREE.Quaternion();
+    for (let i = 0; i < pillarCount; i++) {
+      const a = (i / pillarCount) * Math.PI * 2 + 0.02;
+      const x = Math.cos(a);
+      const z = Math.sin(a);
+      dummy.position.set(x * midR * 1.04, height / 2, z * midR * 1.04);
+      // Face outward then lean with taper
+      eul.set(lean, -a, 0, "YXZ");
+      q.setFromEuler(eul);
+      dummy.quaternion.copy(q);
+      dummy.scale.set(1, 1, 1);
+      dummy.updateMatrix();
+      pillarMesh.current.setMatrixAt(i, dummy.matrix);
+    }
+    pillarMesh.current.instanceMatrix.needsUpdate = true;
+    pillarMesh.current.computeBoundingSphere();
+  }, [pillarCount, midR, height, lean]);
 
   return (
     <group {...props}>
-      {/* —— INNER core (milky white, soft structure) —— */}
       <mesh position={[0, height / 2, 0]}>
         <cylinderGeometry args={[rTop * 0.55, rBot * 0.55, height * 0.98, 20, 1, false]} />
         <meshStandardMaterial
@@ -478,19 +488,14 @@ export function GlassTaperTower({
         />
       </mesh>
 
-      {/* —— INNER: horizontal glowing floor slices —— */}
       {floors.map((f, i) => (
         <group key={`floor-${i}`} position={[0, f.y, 0]}>
-          {/* Structural floor plate */}
           <mesh>
-            <cylinderGeometry args={[f.r * 0.88, f.r * 0.88, 0.08, 32]} />
-            <meshStandardMaterial color="#2c2620" roughness={0.75} metalness={0.08} />
+            <cylinderGeometry args={[f.r * 0.88, f.r * 0.88, 0.08, 24]} />
+            <meshStandardMaterial color="#3a342c" roughness={0.75} metalness={0.08} />
           </mesh>
-          {/* Lit volume between floors — the warm “rooms” slice */}
           <mesh position={[0, 0.14, 0]}>
-            <cylinderGeometry
-              args={[f.r * 0.9, f.r * 0.9, 0.28 + f.bright * 0.15, 32]}
-            />
+            <cylinderGeometry args={[f.r * 0.9, f.r * 0.9, 0.28 + f.bright * 0.15, 24]} />
             <meshStandardMaterial
               color="#ffd8a0"
               emissive="#ffb850"
@@ -501,21 +506,15 @@ export function GlassTaperTower({
               opacity={0.55 + f.bright * 0.4}
             />
           </mesh>
-          {/* Bright edge ring (reads through glass pillars) */}
           <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0.14, 0]}>
-            <torusGeometry args={[f.r * 0.91, 0.045, 6, 40]} />
-            <meshBasicMaterial
-              color="#ffd090"
-              transparent
-              opacity={0.35 + f.bright * 0.6}
-            />
+            <torusGeometry args={[f.r * 0.91, 0.04, 5, 28]} />
+            <meshBasicMaterial color="#ffd090" transparent opacity={0.35 + f.bright * 0.6} />
           </mesh>
         </group>
       ))}
 
-      {/* Lobby — brightest bottom slice */}
       <mesh position={[0, height * 0.08, 0]}>
-        <cylinderGeometry args={[rBot * 0.9, rBot * 0.94, height * 0.14, 32]} />
+        <cylinderGeometry args={[rBot * 0.9, rBot * 0.94, height * 0.14, 24]} />
         <meshStandardMaterial
           color="#ffe8c0"
           emissive="#ffc070"
@@ -526,38 +525,27 @@ export function GlassTaperTower({
         />
       </mesh>
 
-      {/* —— OUTER: vertical glass pillars —— */}
-      {pillars.map((p, i) => (
-        <group
-          key={`pillar-${i}`}
-          position={[p.x * midR * 1.04, height / 2, p.z * midR * 1.04]}
-          rotation={[0, -p.a, 0]}
-        >
-          {/* Lean top inward with the taper (local +X tilt after facing out) */}
-          <mesh rotation={[lean, 0, 0]} castShadow>
-            <boxGeometry args={[pillarW, pillarLen, pillarD]} />
-            <meshStandardMaterial
-              color={color}
-              roughness={0.06}
-              metalness={0.18}
-              transparent
-              opacity={0.48}
-              emissive="#c8dcec"
-              emissiveIntensity={0.12}
-              envMapIntensity={1.6}
-              depthWrite={false}
-            />
-          </mesh>
-        </group>
-      ))}
+      {/* Glass pillars — single instanced draw */}
+      <instancedMesh ref={pillarMesh} args={[pillarGeo, undefined, pillarCount]} frustumCulled>
+        <meshStandardMaterial
+          color={color}
+          roughness={0.06}
+          metalness={0.2}
+          transparent
+          opacity={0.5}
+          emissive="#c8dcec"
+          emissiveIntensity={0.14}
+          depthWrite={false}
+          envMapIntensity={1.5}
+        />
+      </instancedMesh>
 
-      {/* Very light glass veil between pillars */}
       <mesh position={[0, height / 2, 0]}>
-        <cylinderGeometry args={[rTop * 1.03, rBot * 1.03, height, 48, 1, true]} />
+        <cylinderGeometry args={[rTop * 1.03, rBot * 1.03, height, 40, 1, true]} />
         <meshStandardMaterial
           color="#f2f8fc"
           transparent
-          opacity={0.07}
+          opacity={0.08}
           roughness={0.04}
           metalness={0.25}
           depthWrite={false}
@@ -565,34 +553,16 @@ export function GlassTaperTower({
         />
       </mesh>
 
-      {/* Flat roof */}
       <mesh position={[0, height + 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]} castShadow receiveShadow>
-        <circleGeometry args={[rTop * 0.92, 40]} />
+        <circleGeometry args={[rTop * 0.92, 32]} />
         <meshStandardMaterial color="#d0cac0" roughness={0.55} metalness={0.08} />
       </mesh>
-      {/* Scalloped pillar caps at the flat top */}
-      {pillars.map((p, i) => (
-        <mesh
-          key={`cap-${i}`}
-          position={[p.x * rTop * 1.04, height + 0.05, p.z * rTop * 1.04]}
-        >
-          <sphereGeometry args={[pillarW * 0.42, 8, 6]} />
-          <meshStandardMaterial
-            color="#eef4f8"
-            transparent
-            opacity={0.65}
-            roughness={0.12}
-            metalness={0.2}
-          />
-        </mesh>
-      ))}
       <mesh position={[0, height + 0.01, 0]} rotation={[Math.PI / 2, 0, 0]}>
-        <torusGeometry args={[rTop * 1.03, 0.035, 8, 48]} />
-        <meshStandardMaterial color="#e0dcd4" roughness={0.4} metalness={0.12} />
+        <torusGeometry args={[rTop * 1.03, 0.04, 6, 40]} />
+        <meshStandardMaterial color="#e0dcd4" roughness={0.35} metalness={0.15} emissive="#e8f0ff" emissiveIntensity={0.15} />
       </mesh>
-
       <mesh position={[0, 0.05, 0]} rotation={[Math.PI / 2, 0, 0]}>
-        <torusGeometry args={[rBot + 0.07, 0.05, 8, 48]} />
+        <torusGeometry args={[rBot + 0.07, 0.05, 6, 40]} />
         <meshStandardMaterial color="#c4beb4" roughness={0.5} metalness={0.1} />
       </mesh>
     </group>
@@ -1197,35 +1167,38 @@ export function SunlightPod({
   // No per-pod point light — the ring has one shared glow.
   return (
     <group {...props} scale={scale}>
-      <mesh position={[0, 1.1, 0]}>
-        <cylinderGeometry args={[0.06, 0.12, 2.2, 8]} />
-        <meshStandardMaterial color="#c8ccd8" metalness={0.65} roughness={0.3} />
+      <mesh position={[0, 1.1, 0]} castShadow>
+        <cylinderGeometry args={[0.05, 0.11, 2.2, 10]} />
+        <meshStandardMaterial color="#b8bcc8" metalness={0.72} roughness={0.28} />
       </mesh>
       <mesh position={[0, 2.25, 0]} rotation={[Math.PI / 2, 0, 0]}>
-        <torusGeometry args={[0.28, 0.05, 8, 16]} />
-        <meshStandardMaterial color="#9aa0b4" metalness={0.7} roughness={0.3} />
+        <torusGeometry args={[0.28, 0.045, 10, 20]} />
+        <meshStandardMaterial color="#9aa0b4" metalness={0.75} roughness={0.25} />
       </mesh>
       <group position={[0, 2.85, 0]} rotation={[0.35, 0, 0.15]}>
-        <mesh scale={[1, 1.35, 0.72]}>
-          <sphereGeometry args={[0.55, 20, 14]} />
+        <mesh scale={[1, 1.35, 0.72]} castShadow>
+          <sphereGeometry args={[0.55, 24, 16]} />
           <meshStandardMaterial
-            color="#f2e8ff"
+            color="#f4ecff"
             map={tex ?? undefined}
+            bumpMap={tex ?? undefined}
+            bumpScale={0.04}
             transparent
-            opacity={0.85}
-            roughness={0.18}
-            metalness={0.2}
+            opacity={0.82}
+            roughness={0.12}
+            metalness={0.28}
             emissive={warm}
-            emissiveIntensity={0.4}
+            emissiveIntensity={0.55}
+            envMapIntensity={1.2}
           />
         </mesh>
         <mesh position={[0, 0.08, 0]} scale={[0.72, 0.9, 0.45]}>
-          <sphereGeometry args={[0.42, 12, 10]} />
-          <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={0.75} roughness={0.35} metalness={0.35} />
+          <sphereGeometry args={[0.42, 14, 12]} />
+          <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={0.95} roughness={0.3} metalness={0.4} />
         </mesh>
         <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, -0.05, 0]}>
-          <torusGeometry args={[0.52, 0.035, 8, 20]} />
-          <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={1.0} roughness={0.3} metalness={0.45} />
+          <torusGeometry args={[0.52, 0.032, 8, 24]} />
+          <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={1.15} roughness={0.25} metalness={0.5} />
         </mesh>
       </group>
     </group>
@@ -1462,11 +1435,14 @@ function LivingWallStrip({
   length,
   height,
   imageMap = "/textures/living-wall.jpg",
+  swayPhase = 0,
   ...props
 }: {
   length: number;
   height: number;
   imageMap?: string;
+  /** Phase offset so neighboring strips don't sway in lockstep. */
+  swayPhase?: number;
 } & ThreeElements["group"]) {
   const [maps, setMaps] = useState<{
     color: THREE.Texture;
@@ -1491,20 +1467,19 @@ function LivingWallStrip({
       color.colorSpace = THREE.SRGBColorSpace;
       color.wrapS = THREE.RepeatWrapping;
       color.wrapT = THREE.ClampToEdgeWrapping;
-      // Tile horizontally so long walls stay dense leaf detail
-      color.repeat.set(Math.max(1.6, length / 2.8), 1);
+      color.repeat.set(Math.max(1.8, length / 2.4), 1);
       color.anisotropy = 8;
       color.needsUpdate = true;
 
-      // Soft bottom fade only — keep the band fully solid so it flows smoothly
+      // Soft bottom fade
       const aCv = document.createElement("canvas");
       aCv.width = 4;
       aCv.height = 256;
       const aCtx = aCv.getContext("2d")!;
       const g = aCtx.createLinearGradient(0, 0, 0, 256);
       g.addColorStop(0, "#ffffff");
-      g.addColorStop(0.78, "#ffffff");
-      g.addColorStop(0.92, "#c8c8c8");
+      g.addColorStop(0.72, "#ffffff");
+      g.addColorStop(0.9, "#b0b0b0");
       g.addColorStop(1, "#000000");
       aCtx.fillStyle = g;
       aCtx.fillRect(0, 0, 4, 256);
@@ -1520,43 +1495,69 @@ function LivingWallStrip({
     };
   }, [imageMap, length]);
 
+  // Pivot groups at the mount (y=0) so hang tips swing; all walls including window
+  const pivotA = useRef<THREE.Group>(null);
+  const pivotB = useRef<THREE.Group>(null);
+
+  useFrame(({ clock }) => {
+    const t = clock.elapsedTime;
+    // Short strips (e.g. over window) get a bit more angular motion
+    const amp = 0.04 * Math.min(1.5, 1.35 / Math.max(0.45, height));
+    const sway = Math.sin(t * 0.65 + swayPhase) * amp;
+    const sway2 = Math.sin(t * 0.9 + swayPhase * 1.4) * amp * 0.6;
+    const bob = Math.sin(t * 0.5 + swayPhase * 0.7) * 0.014;
+    if (pivotA.current) {
+      pivotA.current.rotation.z = sway;
+      pivotA.current.rotation.x = sway2 * 0.35;
+      pivotA.current.position.x = bob;
+    }
+    if (pivotB.current) {
+      pivotB.current.rotation.z = -sway * 0.75 + sway2 * 0.5;
+      pivotB.current.rotation.x = sway * 0.25;
+      pivotB.current.position.x = -bob * 1.2;
+    }
+  });
+
   if (!maps) return <group {...props} />;
 
   return (
     <group {...props}>
-      {/* Main solid living-wall plane */}
-      <mesh position={[0, -height * 0.5, 0.03]} castShadow>
-        <planeGeometry args={[length, height]} />
-        <meshStandardMaterial
-          map={maps.color}
-          alphaMap={maps.alpha}
-          transparent
-          alphaTest={0.04}
-          roughness={0.78}
-          metalness={0}
-          side={THREE.DoubleSide}
-          depthWrite
-          emissive="#06180c"
-          emissiveIntensity={0.08}
-        />
-      </mesh>
-      {/* Slightly offset second layer for depth / soft volume */}
-      <mesh position={[0, -height * 0.48 - 0.04, 0.08]} scale={[1.01, 0.96, 1]}>
-        <planeGeometry args={[length, height]} />
-        <meshStandardMaterial
-          map={maps.color}
-          alphaMap={maps.alpha}
-          transparent
-          alphaTest={0.08}
-          roughness={0.82}
-          metalness={0}
-          side={THREE.DoubleSide}
-          depthWrite={false}
-          emissive="#06180c"
-          emissiveIntensity={0.05}
-          opacity={0.88}
-        />
-      </mesh>
+      {/* Pivot at ceiling mount so leaves hang and sway from the top */}
+      <group ref={pivotA}>
+        <mesh position={[0, -height * 0.5, 0.03]} castShadow>
+          <planeGeometry args={[length, height, 1, 6]} />
+          <meshStandardMaterial
+            map={maps.color}
+            alphaMap={maps.alpha}
+            transparent
+            alphaTest={0.04}
+            roughness={0.72}
+            metalness={0}
+            side={THREE.DoubleSide}
+            depthWrite
+            emissive="#0a2814"
+            emissiveIntensity={0.16}
+          />
+        </mesh>
+      </group>
+      <group ref={pivotB}>
+        <mesh position={[0, -height * 0.5 - 0.04, 0.1]} scale={[1.02, 0.94, 1]}>
+          <planeGeometry args={[length, height, 1, 6]} />
+          <meshStandardMaterial
+            map={maps.color}
+            alphaMap={maps.alpha}
+            transparent
+            alphaTest={0.08}
+            roughness={0.78}
+            metalness={0}
+            side={THREE.DoubleSide}
+            depthWrite={false}
+            emissive="#0c3018"
+            emissiveIntensity={0.1}
+            opacity={0.9}
+          />
+        </mesh>
+      </group>
     </group>
   );
 }
@@ -1696,9 +1697,10 @@ export function CeilingPlantShelf({
           imageMap={imageMap}
           position={s.pos}
           rotation={s.rot}
+          swayPhase={i * 1.7}
         />
       ))}
-      <pointLight position={[0, y - 0.4, 0]} intensity={3.5} color="#c8ffd8" distance={8} decay={2} />
+      <pointLight position={[0, y - 0.4, 0]} intensity={2.8} color="#c8ffd8" distance={7} decay={2} />
     </group>
   );
 }
