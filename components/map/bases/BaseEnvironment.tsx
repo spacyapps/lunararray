@@ -4,9 +4,9 @@
 // rocks (one draw call), simplified Earth, horizon haze.
 // Built for 60fps — no per-rock materials, no rock shadows.
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-// useMemo still needed for geometry + texture helpers
+import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
+import { Billboard, useTexture } from "@react-three/drei";
 import { loadTexture } from "@/lib/three/textureCache";
 
 function seedRand(i: number): number {
@@ -82,53 +82,46 @@ function InstancedRocks({
   );
 }
 
-function Earth() {
-  // Photoreal Earth disk (Blue Marble) as a camera-facing billboard — sphere
-  // UVs fight a full-disk photo; from the lunar near side a billboard reads true.
-  const [map, setMap] = useState<THREE.Texture | null>(null);
-  const group = useRef<THREE.Group>(null);
+function prepDiskTexture(map: THREE.Texture) {
+  map.colorSpace = THREE.SRGBColorSpace;
+  map.anisotropy = 4;
+  map.needsUpdate = true;
+}
 
-  useEffect(() => {
-    let cancelled = false;
-    loadTexture("/textures/earth-disk.jpg", {
-      wrap: THREE.ClampToEdgeWrapping,
-      repeat: [1, 1],
-      anisotropy: 4,
-    }).then((t) => {
-      if (!cancelled) setMap(t);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // Face the base origin (viewer looks outward at Earth)
+function EarthDisk() {
+  // Photoreal Blue Marble on a Billboard plane — useTexture binds the map
+  // correctly (async spriteMaterial was stuck as a white square).
+  const map = useTexture("/textures/earth-disk.jpg");
   useLayoutEffect(() => {
-    if (!group.current) return;
-    group.current.lookAt(0, 8, 0);
-  }, []);
+    prepDiskTexture(map);
+  }, [map]);
 
   return (
-    <group ref={group} position={[-42, 52, -88]}>
-      <sprite scale={[16, 16, 1]}>
-        <spriteMaterial
-          map={map ?? undefined}
-          color={map ? "#ffffff" : "#3d6fd6"}
-          transparent
-          depthWrite={false}
-        />
-      </sprite>
-      {/* atmospheric halo */}
-      <sprite scale={[19.5, 19.5, 1]}>
-        <spriteMaterial
+    <Billboard position={[-38, 42, -72]} follow>
+      <mesh scale={[22, 22, 1]} renderOrder={-2}>
+        <planeGeometry args={[1, 1]} />
+        <meshBasicMaterial
           color="#7db4ff"
           transparent
-          opacity={0.14}
+          opacity={0.16}
           depthWrite={false}
           blending={THREE.AdditiveBlending}
+          toneMapped={false}
         />
-      </sprite>
-    </group>
+      </mesh>
+      <mesh scale={[18, 18, 1]} renderOrder={-1}>
+        <planeGeometry args={[1, 1]} />
+        <meshBasicMaterial map={map} transparent depthWrite={false} toneMapped={false} />
+      </mesh>
+    </Billboard>
+  );
+}
+
+function Earth() {
+  return (
+    <Suspense fallback={null}>
+      <EarthDisk />
+    </Suspense>
   );
 }
 
