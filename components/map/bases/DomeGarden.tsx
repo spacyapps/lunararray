@@ -1,7 +1,7 @@
 "use client";
 
-// Photoreal vegetation floor under a glass dome — textured disc + soft
-// under-glow, no low-poly plant meshes.
+// Production greenery under glass: densely tiled crop-row texture so plants
+// read as many small beds (industrial greenhouse), not one giant bush.
 
 import { useEffect, useState } from "react";
 import * as THREE from "three";
@@ -15,11 +15,15 @@ export default function DomeGarden({
   y?: number;
 }) {
   const [map, setMap] = useState<THREE.Texture | null>(null);
+  // Many small rows across the pad — scale with radius so large park dome
+  // has denser tiling than tiny satellite domes.
+  const repeat = Math.max(4, Math.round(radius * 0.85));
+
   useEffect(() => {
     let cancelled = false;
-    loadTexture("/textures/dome-vegetation.jpg", {
-      wrap: THREE.ClampToEdgeWrapping,
-      repeat: [1, 1],
+    loadTexture("/textures/greenhouse-rows.jpg", {
+      wrap: THREE.RepeatWrapping,
+      repeat: [repeat, repeat],
       anisotropy: 4,
     }).then((t) => {
       if (!cancelled) setMap(t);
@@ -27,34 +31,27 @@ export default function DomeGarden({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [repeat]);
 
   return (
     <group position={[0, y, 0]}>
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-        <circleGeometry args={[radius * 0.92, 48]} />
+        <circleGeometry args={[radius * 0.9, 48]} />
         <meshStandardMaterial
           map={map ?? undefined}
-          color={map ? "#ffffff" : "#2a6a3a"}
-          roughness={0.88}
-          metalness={0.02}
-          emissive="#0a2810"
-          emissiveIntensity={0.15}
-        />
-      </mesh>
-      {/* soft moss rim under glass skirt */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]}>
-        <ringGeometry args={[radius * 0.88, radius * 0.96, 48]} />
-        <meshStandardMaterial
-          color="#1e4a2c"
+          color={map ? "#e8f0e4" : "#2a6a3a"}
           roughness={0.9}
-          emissive="#0d3018"
-          emissiveIntensity={0.2}
-          transparent
-          opacity={0.85}
+          metalness={0.02}
+          emissive="#0a2010"
+          emissiveIntensity={0.08}
         />
       </mesh>
-      <pointLight position={[0, 1.2, 0]} intensity={6} color="#9be8b0" distance={radius * 1.6} decay={2} />
+      {/* walkway ring at glass edge */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.012, 0]}>
+        <ringGeometry args={[radius * 0.86, radius * 0.94, 48]} />
+        <meshStandardMaterial color="#c8c4b8" roughness={0.75} metalness={0.15} />
+      </mesh>
+      <pointLight position={[0, 1.0, 0]} intensity={4} color="#9be8b0" distance={radius * 1.5} decay={2} />
     </group>
   );
 }

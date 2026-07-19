@@ -1,13 +1,12 @@
 "use client";
 
 // Photoreal local-scene environment: tiled NASA-style regolith, instanced
-// rocks (one draw call), simplified Earth, horizon haze.
-// Built for 60fps — no per-rock materials, no rock shadows.
+// rocks, circular Earth + Sun disks, horizon haze.
 
-import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
-import { Billboard, useTexture } from "@react-three/drei";
 import { loadTexture } from "@/lib/three/textureCache";
+import { EarthDisk, SunDisk } from "../CelestialDisk";
 
 function seedRand(i: number): number {
   const x = Math.sin(i * 12.9898 + 78.233) * 43758.5453;
@@ -82,49 +81,6 @@ function InstancedRocks({
   );
 }
 
-function prepDiskTexture(map: THREE.Texture) {
-  map.colorSpace = THREE.SRGBColorSpace;
-  map.anisotropy = 4;
-  map.needsUpdate = true;
-}
-
-function EarthDisk() {
-  // Photoreal Blue Marble on a Billboard plane — useTexture binds the map
-  // correctly (async spriteMaterial was stuck as a white square).
-  const map = useTexture("/textures/earth-disk.jpg");
-  useLayoutEffect(() => {
-    prepDiskTexture(map);
-  }, [map]);
-
-  return (
-    <Billboard position={[-38, 42, -72]} follow>
-      <mesh scale={[22, 22, 1]} renderOrder={-2}>
-        <planeGeometry args={[1, 1]} />
-        <meshBasicMaterial
-          color="#7db4ff"
-          transparent
-          opacity={0.16}
-          depthWrite={false}
-          blending={THREE.AdditiveBlending}
-          toneMapped={false}
-        />
-      </mesh>
-      <mesh scale={[18, 18, 1]} renderOrder={-1}>
-        <planeGeometry args={[1, 1]} />
-        <meshBasicMaterial map={map} transparent depthWrite={false} toneMapped={false} />
-      </mesh>
-    </Billboard>
-  );
-}
-
-function Earth() {
-  return (
-    <Suspense fallback={null}>
-      <EarthDisk />
-    </Suspense>
-  );
-}
-
 export default function BaseEnvironment({
   groundColor = "#9a9588",
   rockTint = "#7a766c",
@@ -140,7 +96,6 @@ export default function BaseEnvironment({
 
   return (
     <group>
-      {/* Single disc — was 3 layered rings with separate materials */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <circleGeometry args={[110, 64]} />
         <meshStandardMaterial
@@ -152,13 +107,14 @@ export default function BaseEnvironment({
           metalness={0.02}
         />
       </mesh>
-      {/* horizon fade */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.04, 0]}>
         <ringGeometry args={[95, 130, 48]} />
         <meshBasicMaterial color="#05060a" transparent opacity={0.88} side={THREE.DoubleSide} depthWrite={false} />
       </mesh>
       <InstancedRocks seed={seed} tint={rockTint} map={regolith} count={72} />
-      <Earth />
+      {/* Circular photoreal Earth + Sun (always visible in base orbit) */}
+      <EarthDisk position={[-38, 42, -72]} size={16} />
+      <SunDisk position={[-52, 48, 38]} size={7} />
     </group>
   );
 }
